@@ -53,6 +53,23 @@ jobs:
             exit 1
           fi
       
+      - name: Extract warnings
+        if: success()
+        run: |
+          echo "### Build Warnings" >> $GITHUB_STEP_SUMMARY
+          
+          # Extract warnings from build log
+          if grep -i "warning" build.log > warnings.txt 2>/dev/null && [ -s warnings.txt ]; then
+            echo "<details><summary>Warnings found (informational)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat warnings.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No warnings" >> $GITHUB_STEP_SUMMARY
+          fi
+      
       - name: Count sorry
         if: always()
         run: |
@@ -99,13 +116,6 @@ jobs:
             echo "None found" >> $GITHUB_STEP_SUMMARY
           fi
           echo "</details>" >> $GITHUB_STEP_SUMMARY
-      
-      - name: Linter
-        if: always()
-        continue-on-error: true
-        run: |
-          echo "### Linter Warnings" >> $GITHUB_STEP_SUMMARY
-          echo "To be configured" >> $GITHUB_STEP_SUMMARY
       
       - name: Summary
         if: always()
