@@ -1,0 +1,51 @@
+# FAA 2025 Class Projects
+
+Formalization of Algorithms and Arithmetic - ETH Zurich
+
+## Quick Start
+
+```bash
+git clone https://github.com/sorrachai/FAA2025_class_projects.git
+cd FAA2025_class_projects
+lake exe cache get
+lake build
+```
+
+## Workflow
+
+### Create your branch
+```bash
+git checkout -b project1-yourname
+```
+
+### Work on your project
+Edit files in `Projects/ProjectN/`
+
+### Test locally
+```bash
+lake build
+```
+
+### Submit
+```bash
+git add .
+git commit -m "Complete Project 1"
+git push origin project1-yourname
+```
+
+Then create a Pull Request on GitHub.
+
+## CI Checks
+
+Automatic checks on every push:
+
+- **Build**: Must compile successfully
+- **Sorry count**: Number of incomplete proofs
+- **Axiom usage**: Custom axioms are not allowed
+- **Linter**: Code quality warnings
+
+## Resources
+
+- [Lean 4 Documentation](https://lean-lang.org/lean4/doc/)
+- [Theorem Proving in Lean 4](https://lean-lang.org/theorem_proving_in_lean4/)
+- [Mathlib Docs](https://leanprover-community.github.io/mathlib4_docs/)

@@ -1,0 +1,12 @@
+/.lake/
+/lake-packages/
+/build/
+*.olean
+*.trace
+/lake-manifest.json
+
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

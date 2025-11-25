@@ -1,0 +1,116 @@
+name: Lean CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+      
+      - name: Print versions
+        run: |
+          echo "### Lean Toolchain" >> $GITHUB_STEP_SUMMARY
+          cat lean-toolchain >> $GITHUB_STEP_SUMMARY
+          lean --version
+          lake --version
+      
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: .lake
+          key: ${{ runner.os }}-lake-${{ hashFiles('lakefile.lean', 'lean-toolchain', 'lake-manifest.json') }}
+          restore-keys: ${{ runner.os }}-lake-
+      
+      - name: Update dependencies
+        run: |
+          lake update
+          lake exe cache get || echo "Cache unavailable"
+      
+      - name: Build
+        id: build
+        run: |
+          echo "### Build Status" >> $GITHUB_STEP_SUMMARY
+          if lake build 2>&1 | tee build.log; then
+            echo "Build: SUCCESS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Build: FAILED" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 50 build.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+      
+      - name: Count sorry
+        if: always()
+        run: |
+          echo "### Sorry Count" >> $GITHUB_STEP_SUMMARY
+          SORRY_COUNT=$(grep -r "sorry" --include="*.lean" Projects/ 2>/dev/null | wc -l || echo "0")
+          echo "Total: $SORRY_COUNT" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "$SORRY_COUNT" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "<details><summary>Locations</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -rn "sorry" --include="*.lean" Projects/ 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Check axioms
+        if: always()
+        run: |
+          echo "### Axiom Check" >> $GITHUB_STEP_SUMMARY
+          
+          # Check for custom axiom definitions (not allowed)
+          if grep -r "^axiom " --include="*.lean" Projects/ 2>/dev/null; then
+            echo "FAILED: Custom axioms detected (not allowed)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -rn "^axiom " --include="*.lean" Projects/ 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          else
+            echo "No custom axioms" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Report Classical axiom usage (informational)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>Classical axioms (informational)</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if grep -r "Classical\." --include="*.lean" Projects/ 2>/dev/null | head -20; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            grep -rn "Classical\." --include="*.lean" Projects/ 2>/dev/null | head -20 >> $GITHUB_STEP_SUMMARY || true
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "None found" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Linter
+        if: always()
+        continue-on-error: true
+        run: |
+          echo "### Linter Warnings" >> $GITHUB_STEP_SUMMARY
+          echo "To be configured" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "Branch: \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
