@@ -19,7 +19,8 @@ git checkout -b project1-yourname
 ```
 
 ### Work on your project
-Edit files in `Projects/ProjectN/`
+Create a new folder named after your last name. 
+Edit files in `Projects/[LastName]/`
 
 ### Test locally
 ```bash
