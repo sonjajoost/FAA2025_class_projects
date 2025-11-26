@@ -1,6 +1,6 @@
 # FAA 2025 Class Projects
 
-Formalization of Algorithms and Arithmetic - ETH Zurich
+Formalization of Analysis of Algorithms - ETH Zurich
 
 ## Quick Start
 
