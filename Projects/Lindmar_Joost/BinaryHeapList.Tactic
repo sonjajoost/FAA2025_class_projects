@@ -1,0 +1,43 @@
+import Mathlib.Tactic
+
+namespace BinaryHeap
+
+def parent (c: ℕ) := c/2
+
+def leftChild (p: ℕ) := 2*p+1
+
+def rightChild (p: ℕ) := 2*(p+1)
+
+#eval parent 1
+
+def swap (xs: List ℕ) (i: ℕ) (j: ℕ) (hi : i < xs.length) (hj : j < xs.length): List ℕ :=
+  let t := xs[i]
+  let ys := xs.set i xs[j]
+  xs.set j t
+
+lemma len_swap (xs: List ℕ) (i: ℕ) (j: ℕ) (hi : i < xs.length) (hj : j < xs.length): xs.length = (swap xs i j hi hj).length := by
+  induction xs; all_goals simp [swap]
+
+lemma parent_le_length (xs: List ℕ) (i: ℕ) (hi : i < xs.length): parent i < xs.length := by
+  unfold parent; omega
+
+def siftUp (xs: List ℕ) (i: ℕ) (hi : i < xs.length) : List ℕ :=
+  have: parent i < xs.length := by apply parent_le_length; exact hi
+  if i==0 then xs else
+  if xs[(parent i)] > xs[i] then siftUp (swap xs i (parent i) (by grind) (by grind)) (parent i) (by grind [len_swap]) else xs
+  termination_by i decreasing_by unfold parent; grind
+
+
+def insert (x: ℕ)  (xs : List ℕ): List ℕ :=  siftUp (List.concat xs x) xs.length (by grind)
+
+-- completeness via Monads?
+
+def isHeap (hs: List ℕ):= ∀(i: ℕ), (hi: i < hs.length) → hs[parent i]'(parent_le_length hs i hi) <= hs[i]
+
+lemma nil_is_heap: isHeap [] := by simp [isHeap]
+
+lemma insert_preserves_isHeap (hs: List ℕ) (h: ℕ): isHeap hs → isHeap (insert h  hs) := by
+  intro hhs i hi
+  induction i
+  . simp [parent]
+  . 
