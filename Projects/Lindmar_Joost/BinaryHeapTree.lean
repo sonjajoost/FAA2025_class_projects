@@ -8,7 +8,7 @@ inductive BinaryTree (α : Type)
 
 namespace BinaryTree
 
-def isMinHeap : BinaryTree ℕ → Bool
+def isMinHeap : BinaryTree ℕ → Prop
 | leaf => true
 | node l v r => match l, r with
       | leaf, leaf => true
@@ -29,34 +29,31 @@ def heapify (bt: BinaryTree ℕ): BinaryTree ℕ := match bt with
                                           if v <= rv then bt
                                           else node l rv (heapify (node rl v rr))
 
-def leftAndRightAreMinHeap: (BinaryTree ℕ) →  Bool
+def leftAndRightAreMinHeap: (BinaryTree ℕ) →  Prop
 | leaf => true
 | node l _ r => isMinHeap l ∧ isMinHeap r
 
-def rootIsMinOfChildren: (BinaryTree ℕ) →  Bool
+def rootIsMinOfChildren: (BinaryTree ℕ) →  Prop
 | leaf => true
 | node l v r => match l, r with
     | leaf, leaf => true
     | leaf, node _ rv _ => v <= rv
     | node _ lv _, leaf => v <= lv
-    | node _ lv _, node _ rv _ =>  v <= lv && v <= rv
+    | node _ lv _, node _ rv _ =>  v <= lv ∧ v <= rv
 
 
-lemma minHeapThenLeftAndRightAreMinHeap (bt: BinaryTree ℕ): isMinHeap bt = true → leftAndRightAreMinHeap bt = true := by
+lemma minHeapThenLeftAndRightAreMinHeap (bt: BinaryTree ℕ): isMinHeap bt → leftAndRightAreMinHeap bt := by
 intro hbt
 fun_induction isMinHeap
 . simp [leftAndRightAreMinHeap]
 . simp [leftAndRightAreMinHeap, isMinHeap]
 . expose_names
-  simp at hbt
   simp [leftAndRightAreMinHeap, hbt]
   simp [isMinHeap]
 . expose_names
-  simp at hbt
   simp [leftAndRightAreMinHeap, hbt]
   simp [isMinHeap]
 . expose_names
-  simp at hbt
   simp [leftAndRightAreMinHeap, hbt]
 
 lemma leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap (bt: BinaryTree ℕ): leftAndRightAreMinHeap bt ∧ rootIsMinOfChildren bt → isMinHeap bt := by
@@ -89,15 +86,49 @@ fun_induction heapify; all_goals expose_names
   contradiction
 all_goals simp
 
-lemma heapifyPreserversMinHeapChildren (bt: BinaryTree ℕ) (hbt: leftAndRightAreMinHeap bt):leftAndRightAreMinHeap (heapify bt) := by
-all_goals sorry
 
+
+def contains: (BinaryTree ℕ) → ℕ → Prop
+| leaf, _ => false
+| node l v r, v' => v=v' ∨ contains l v' ∨ contains r v'
+
+
+--lemma heapifyPreserversMinHeapChildren (bt: BinaryTree ℕ) (hbt: leftAndRightAreMinHeap bt):leftAndRightAreMinHeap (heapify bt) := by
+--all_goals sorry
+
+
+lemma heapifyPreservesMembers (bt: BinaryTree ℕ) (v: ℕ): contains bt v → contains (heapify bt) v := by
+intro hbt
+fun_induction heapify generalizing v; all_goals try grind[contains]
+
+lemma containsIsNode (bt: BinaryTree ℕ) (v: ℕ): contains bt v → ∃ l v' r, bt = node l v' r := by
+fun_induction contains; all_goals simp
+
+lemma minHeapMemberLeRoot (bt: BinaryTree ℕ) (v v': ℕ):  isMinHeap bt → (∃ l v'' r, bt = (node l v'' r) ∧ v'' ≤ v) →  contains bt v' → v' ≤ v := by
+intro hmin hl hc
+fun_induction contains generalizing v
+. contradiction
+. expose_names
+  cases hc; all_goals expose_names
+  . obtain ⟨v'', l', r', h⟩ := h
+    have: v_1 ≤ v := by grind
+    grind
+  . cases h; all_goals expose_names
+    . apply ih2
+      . apply minHeapThenLeftAndRightAreMinHeap at hmin
+        simp [leftAndRightAreMinHeap] at hmin
+        simp [hmin]
+      .
+
+
+    . cases l
+      . contradiction
+      . expose_names
+        have: l = a.node a_1 a_2
 
 
 lemma heapifyEstablishesRootIsMinOfChildren (bt: BinaryTree ℕ) (hbt: leftAndRightAreMinHeap bt): rootIsMinOfChildren (heapify bt) := by
-fun_induction heapify; all_goals expose_names
-. simp [rootIsMinOfChildren]
-. simp [rootIsMinOfChildren]
+fun_induction heapify; all_goals expose_names; all_goals try grind[rootIsMinOfChildren, leftAndRightAreMinHeap]
 . have hr: (rl.node rv rr).leftAndRightAreMinHeap := by
     grind [leftAndRightAreMinHeapRight]
   simp [leftAndRightAreMinHeap] at hr
@@ -112,6 +143,12 @@ fun_induction heapify; all_goals expose_names
   simp[rootIsMinOfChildren]
   grw[h]
   rw [hrw] at hr2
+  have: contains (node rl' v' rr') v := by
+    rw [←hrw]
+    apply heapifyPreservesMembers
+    simp [contains]
+
+
 
   sorry
 all_goals sorry
