@@ -28,6 +28,37 @@ def heapify (bt: BinaryTree ENat): BinaryTree ENat := match bt with
                                           if v <= rv then bt
                                           else node l rv (heapify (node rl v rr))
 
+def extractMin: BinaryTree ENat → Option ENat
+| leaf => none
+| node _ v _ => some v
+
+def minHeap:  BinaryTree ENat → ENat
+| leaf => ⊤
+| node l v r => match l, r with
+    | leaf, leaf => v
+    | leaf, node _ rv _ => if v <= rv then v else rv
+    | node _ lv _, leaf => if v <= lv then v else lv
+    | node _ lv _, node _ rv _ =>  if lv <= rv then
+                                     if v <= lv then v
+                                     else lv
+                                    else
+                                      if v <= rv then v
+                                      else rv
+-- def min:  BinaryTree ENat → ENat
+-- | leaf => ⊤
+-- | node l v r => if l
+--     | leaf, leaf => v
+--     | leaf, node _ rv _ => if v <= rv then v else rv
+--     | node _ lv _, leaf => if v <= lv then v else lv
+--     | node _ lv _, node _ rv _ =>  if lv <= rv then
+--                                      if v <= lv then v
+--                                      else lv
+--                                     else
+--                                       if v <= rv then v
+--                                       else rv
+
+lemma extractMinCorrect (bt: BinaryTree ENat): isMinHeap bt → extractMin bt = minHeap bt := by sorry
+
 def leftAndRightAreMinHeap: (BinaryTree ENat) →  Prop
 | leaf => true
 | node l _ r => isMinHeap l ∧ isMinHeap r
@@ -72,26 +103,14 @@ fun_induction heapify; all_goals expose_names
   contradiction
 all_goals simp
 
-def min:  BinaryTree ENat → ENat
-| leaf => ⊤
-| node l v r => match l, r with
-    | leaf, leaf => v
-    | leaf, node _ rv _ => if v <= rv then v else rv
-    | node _ lv _, leaf => if v <= lv then v else lv
-    | node _ lv _, node _ rv _ =>  if lv <= rv then
-                                     if v <= lv then v
-                                     else lv
-                                    else
-                                      if v <= rv then v
-                                      else rv
 
 
-lemma heapifyPreservesStructureAndRootMin (bt: BinaryTree ENat): (∃ l r v, bt = node l v r) →  ∃ l' v' r', heapify bt = node l' v' r' ∧ v' ≤ (min bt) := by
+lemma heapifyPreservesStructureAndRootMin (bt: BinaryTree ENat): (∃ l r v, bt = node l v r) →  ∃ l' v' r', heapify bt = node l' v' r' ∧ v' ≤ (minHeap bt) := by
 intro hbt
 fun_induction heapify; all_goals expose_names
 . obtain ⟨l, r, v, hbt⟩ := hbt
   contradiction
-all_goals grind [min]
+all_goals grind [minHeap]
 
 def contains: (BinaryTree ENat) → ENat → Prop
 | leaf, _ => false
@@ -109,12 +128,12 @@ fun_induction heapify generalizing v; all_goals try grind[contains]
 lemma containsIsNode (bt: BinaryTree ENat) (v: ENat): contains bt v → ∃ l v' r, bt = node l v' r := by
 fun_induction contains; all_goals simp
 
-lemma minHeapRootMin (bt l r: BinaryTree ENat) (v: ENat): bt = (node l v r) → isMinHeap bt → v = min bt := by
+lemma minHeapRootMin (bt l r: BinaryTree ENat) (v: ENat): bt = (node l v r) → isMinHeap bt → v = minHeap bt := by
 intro hbt hmin
-fun_induction isMinHeap; all_goals grind [min]
+fun_induction isMinHeap; all_goals grind [minHeap]
 
 
-lemma minHeapMemberLeRoot (bt: BinaryTree ENat) (v: ENat):  isMinHeap bt →  contains bt v → v ≤ min bt := by
+lemma minHeapMemberLeRoot (bt: BinaryTree ENat) (v: ENat):  isMinHeap bt →  contains bt v → v ≤ minHeap bt := by
 intro hmin hl
 fun_induction contains
 . contradiction
@@ -184,23 +203,23 @@ lemma heapifyPreservesMinHeap (bt: BinaryTree ENat): isMinHeap bt → bt = heapi
 fun_induction heapify; all_goals expose_names; all_goals try grind
 . intro hbt
   by_contra
-  have hbtmin: v = min (leaf.node v (rl.node rv rr)) := by grind [minHeapRootMin]
-  grind[min]
+  have hbtmin: v = minHeap (leaf.node v (rl.node rv rr)) := by grind [minHeapRootMin]
+  grind[minHeap]
 . intro hbt
   by_contra
-  have hbtmin: v = min ((ll.node lv lr).node v leaf) := by grind [minHeapRootMin]
-  grind[min]
+  have hbtmin: v = minHeap ((ll.node lv lr).node v leaf) := by grind [minHeapRootMin]
+  grind[minHeap]
 . intro hbt
-  have hbtmin: v = min ((ll.node lv lr).node v (rl.node rv rr)) := by grind [minHeapRootMin]
-  grind[min]
+  have hbtmin: v = minHeap ((ll.node lv lr).node v (rl.node rv rr)) := by grind [minHeapRootMin]
+  grind[minHeap]
 . intro hbt
-  have hbtmin: v = min ((ll.node lv lr).node v (rl.node rv rr)) := by grind [minHeapRootMin]
-  grind[min]
+  have hbtmin: v = minHeap ((ll.node lv lr).node v (rl.node rv rr)) := by grind [minHeapRootMin]
+  grind[minHeap]
 
 lemma binTreeEq (l r l' r': BinaryTree ENat) (v v': ENat): (node l v r) = (node l' v' r') → r = r' := by
 grind only
 
-lemma decreaseRootIsHeap (l r: BinaryTree ENat) (v v': ENat): isMinHeap (node l v r) →  v' ≤ min (node l v r) → isMinHeap (node l v' r) := by sorry
+lemma decreaseRootIsHeap (l r: BinaryTree ENat) (v v': ENat): isMinHeap (node l v r) →  v' ≤ minHeap (node l v r) → isMinHeap (node l v' r) := by sorry
 
 lemma heapifyEstablishesMinHeap' (bt l r: BinaryTree ENat) (v: ENat): bt = node l v r ∧  isMinHeap l ∧ isMinHeap r → isMinHeap (heapify bt) := by
 fun_induction heapify generalizing l r v; all_goals expose_names
@@ -208,7 +227,7 @@ fun_induction heapify generalizing l r v; all_goals expose_names
 . simp [isMinHeap]
 . intro ⟨hr, hminl, hminr⟩
   apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
-  have: ∃ rl' v' rr', (rl.node v_1 rr).heapify = node rl' v' rr' ∧ v' ≤ min (rl.node v_1 rr) := by
+  have: ∃ rl' v' rr', (rl.node v_1 rr).heapify = node rl' v' rr' ∧ v' ≤ minHeap (rl.node v_1 rr) := by
         apply heapifyPreservesStructureAndRootMin
         simp
   obtain ⟨rl', v', rr', hr1, hr2⟩ := this
@@ -228,7 +247,7 @@ fun_induction heapify generalizing l r v; all_goals expose_names
       apply ih1; all_goals grind
   . rw [hr1]
     simp [rootIsMinOfChildren]
-    have hrvmin : rv = min (rl.node rv rr) := by sorry
+    have hrvmin : rv = minHeap (rl.node rv rr) := by sorry
     have hcontains: contains (rl.node rv rr) v' ∨ v'= v_1 := by sorry
     cases hcontains
     . expose_names
@@ -273,11 +292,6 @@ fun_induction heapify generalizing l r v; all_goals expose_names
 
 --   .
 
-
-
-
-
-
 lemma heapifyEstablishesMinHeap (bt: BinaryTree ENat): (hbt: leftAndRightAreMinHeap bt) → isMinHeap (heapify bt) := by
 fun_induction heapify; all_goals expose_names; all_goals try grind [isMinHeap]
 . intro hbt
@@ -292,7 +306,7 @@ fun_induction heapify; all_goals expose_names; all_goals try grind [isMinHeap]
     . simp [isMinHeap]
     . exact hb2
   .
-    have: ∃ rl' v' rr', (rl.node v rr).heapify = node rl' v' rr' ∧ v' ≤ min (rl.node v rr) := by
+    have: ∃ rl' v' rr', (rl.node v rr).heapify = node rl' v' rr' ∧ v' ≤ minHeap (rl.node v rr) := by
       apply heapifyPreservesStructureAndRootMin
       simp
     obtain ⟨rl', v', rr', hr1, hr2⟩ := this
