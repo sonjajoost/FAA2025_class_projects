@@ -134,7 +134,10 @@ lemma rootIsMinOfChildrenLeft (l r ll lr: BinaryTree ENat) (v lv: ENat): rootIsM
   cases r; all_goals grind[rootIsMinOfChildren]
 
 
-lemma rootIsMinOfChildrenRight (l r rl rr: BinaryTree ENat) (v rv: ENat): rootIsMinOfChildren (node l v r) →  r = (node rl rv rr) → v ≤ rv := by sorry
+lemma rootIsMinOfChildrenRight (l r rl rr: BinaryTree ENat) (v rv: ENat): rootIsMinOfChildren (node l v r) →  r = (node rl rv rr) → v ≤ rv := by
+  intros; expose_names
+  rw [h_1] at h
+  cases r; all_goals grind[rootIsMinOfChildren]
 
 lemma minHeapMemberLeRoot (bt: BinaryTree ENat) (v: ENat):  isMinHeap bt →  contains bt v →  heapMin bt ≤ v := by
 intro hmin hl
@@ -243,7 +246,10 @@ fun_induction heapify; all_goals expose_names; all_goals try grind
   have hbtmin: v = heapMin ((ll.node lv lr).node v (rl.node rv rr)) := by grind [minHeapRootMin]
   grind[heapMin]
 
-lemma binTreeEq (l r l' r': BinaryTree ENat) (v v': ENat): (node l v r) = (node l' v' r') → r = r' := by
+lemma binTreeEqR (l r l' r': BinaryTree ENat) (v v': ENat): (node l v r) = (node l' v' r') → r = r' := by
+grind only
+
+lemma binTreeEqL (l r l' r': BinaryTree ENat) (v v': ENat): (node l v r) = (node l' v' r') → l = l' := by
 grind only
 
 -- lemma decreaseRootIsHeap (l r: BinaryTree ENat) (v v': ENat): isMinHeap (node l v r) →  v' ≤ minHeap (node l v r) → isMinHeap (node l v' r) := by sorry
@@ -260,7 +266,7 @@ fun_induction heapify generalizing l r v; all_goals expose_names
   obtain ⟨rl', v', rr', hr1, hr2⟩ := this
   have hv: v=v_1 := by grind
   have hrnode: r = (rl.node rv rr) := by
-        apply binTreeEq at hr
+        apply binTreeEqR at hr
         simp [hr]
   constructor
   . simp [leftAndRightAreMinHeap]
@@ -274,23 +280,59 @@ fun_induction heapify generalizing l r v; all_goals expose_names
       apply ih1; all_goals grind
   . rw [hr1]
     simp [rootIsMinOfChildren]
-    have hrvmin : rv = heapMin (rl.node rv rr) := by sorry
+    have hrvmin : rv = heapMin (rl.node rv rr) := by
+      apply minHeapRootMin (rl.node rv rr) rl rr rv (rfl)
+      rw[← hrnode]; exact hminr
     have hcontains: contains (rl.node rv rr) v' ∨ v'= v_1 := by sorry
     cases hcontains
     . expose_names
       apply minHeapMemberLeRoot r v' at hminr
       rw [← hrnode] at h_1
       apply hminr at h_1
-
-      sorry
+      grw[← h_1]
+      rw[hrvmin]
+      rw[hrnode]
     . expose_names
       rw [h_1]
       grw [h]
-
-
-
 . grind [isMinHeap]
-. sorry
+. intro ⟨hl, hminl, hminr⟩
+  apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
+  have: ∃ ll' v' lr', (ll.node v_1 lr).heapify = node ll' v' lr' ∧ v' ≤ heapMin (ll.node v_1 lr) := by
+        apply heapifyPreservesStructureAndRootMin
+        simp
+  obtain ⟨rl', v', rr', hr1, hr2⟩ := this
+  have hv: v=v_1 := by grind
+  have hlnode: l = (ll.node lv lr) := by
+        apply binTreeEqL at hl
+        simp [hl]
+  constructor
+  . simp [leftAndRightAreMinHeap]
+    constructor
+    . specialize ih1 ll lr v_1
+      simp at ih1
+      apply minHeapThenLeftAndRightAreMinHeap at hminl
+      simp [leftAndRightAreMinHeap] at hminl
+      simp [hlnode] at hminl
+      apply ih1; all_goals grind
+    . simp [isMinHeap]
+  . rw [hr1]
+    simp [rootIsMinOfChildren]
+    have hlvmin : lv = heapMin (ll.node lv lr) := by
+      apply minHeapRootMin (ll.node lv lr) ll lr lv (rfl)
+      rw[← hlnode]; exact hminl
+    have hcontains: contains (ll.node lv lr) v' ∨ v'= v_1 := by sorry
+    cases hcontains
+    . expose_names
+      apply minHeapMemberLeRoot l v' at hminl
+      rw [← hlnode] at h_1
+      apply hminl at h_1
+      grw[← h_1]
+      rw[hlvmin]
+      rw[hlnode]
+    . expose_names
+      rw [h_1]
+      grw [h]
 . grind [isMinHeap]
 . grind [isMinHeap]
 . sorry
