@@ -13,6 +13,7 @@ structure BinaryHeap (α : Type u) where
   tree : BinaryTree α
 
 namespace BinaryHeap
+
 def empty {α : Type u} : BinaryHeap α := { tree := BinaryTree.leaf }
 set_option linter.unusedVariables false
 def add {α : Type u} (h : BinaryHeap α) (v : α) (priority : Nat) : BinaryHeap α := sorry
@@ -20,7 +21,22 @@ noncomputable def extract_min {α : Type u} [Nonempty α] (h : BinaryHeap α) : 
 
 def sizeOf {α : Type u} (h : BinaryHeap α) : Nat := sorry
 def isEmpty {α : Type u} (h : BinaryHeap α) : Bool := sorry
-def decrease_priority (h: BinaryHeap α) (v : V) (n : Nat) : BinaryHeap α := sorry
+def decrease_priority (h : BinaryHeap α) (v : α) (n : ENat) : BinaryHeap α := sorry
+
+-- Helper lemma: decreasing priority does not increase heap size
+theorem sizeOf_decrease_priority_le {α : Type u} (h : BinaryHeap α) (v : α) (n : ENat) :
+  sizeOf (decrease_priority h v n) ≤ sizeOf h := by
+  -- To be proved from the concrete heap implementation
+  sorry
+
+-- Helper lemma: extracting the minimum from a non-empty heap strictly decreases its size.
+theorem sizeOf_extract_min_lt_of_isEmpty_eq_false
+    {V : Type*} [Nonempty V] (h : BinaryHeap V) (hNE : h.isEmpty = false) :
+    sizeOf (Prod.snd (extract_min h)) < sizeOf h := by
+  -- To be proved from the concrete heap implementation
+  sorry
+
+
 end BinaryHeap
 
 structure FinSimpleGraph (V : Type u) [Fintype V] [DecidableEq V]  extends SimpleGraph V
@@ -31,16 +47,17 @@ instance  fintypeFinSimpleGraph {V : Type u} [Fintype V] [DecidableEq V] (G : Fi
 
 open Finset SimpleGraph BinaryHeap
 
-
 variable  {V : Type*} [Fintype V] [DecidableEq V]
 
-noncomputable def relaxNeighbors (g : FinSimpleGraph V) (u : V) (dist : V → Nat) (queue : BinaryHeap V) : (V → Nat) × (BinaryHeap V) :=
+
+
+noncomputable def relaxNeighbors (g : FinSimpleGraph V) (u : V) (dist : V → ENat) (queue : BinaryHeap V) : (V → ENat) × (BinaryHeap V) :=
   List.foldl
-    (fun (acc : (V → Nat) × BinaryHeap V) (v : V) =>
+    (fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
       let (dist, queue) := acc
       let alt := dist u + 1
       if alt < dist v then
-        let dist' : V → Nat := fun x => if x = v then alt else dist x
+        let dist' : V → ENat := fun x => if x = v then alt else dist x
         let queue' := queue.decrease_priority v alt
         (dist', queue')
       else
@@ -49,19 +66,67 @@ noncomputable def relaxNeighbors (g : FinSimpleGraph V) (u : V) (dist : V → Na
     (dist, queue)
     (g.neighborFinset u).val.toList
 
+theorem sizeOf_relaxNeighbors_le
+    (g : FinSimpleGraph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
+    BinaryHeap.sizeOf (Prod.snd (relaxNeighbors g u dist q)) ≤ BinaryHeap.sizeOf q := by
+  -- Proof by induction on the list of neighbors
+  let neighbors := (g.neighborFinset u).val.toList
+  let f := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
+    let (dist, queue) := acc
+    let alt := dist u + 1
+    if alt < dist v then
+      let dist' : V → ENat := fun x => if x = v then alt else dist x
+      let queue' := queue.decrease_priority v alt
+      (dist', queue')
+    else
+      (dist, queue)
+  -- Induction on neighbors
+  induction neighbors generalizing dist q with
+  | nil =>
+    simp [relaxNeighbors]
+    exact le_refl _
+  | cons v vs ih =>
+    simp [relaxNeighbors]
+    specialize ih
+    cases acc : f (dist, q) v with
+    | mk dist' queue' =>
+      have hle : BinaryHeap.sizeOf queue' ≤ BinaryHeap.sizeOf q := by
+        -- If decrease_priority is called, use its lemma
+        dsimp [f] at acc
+        split at acc
+        case isTrue h =>
+          -- decrease_priority branch
+          injection acc with h_dist h_queue
+          subst h_queue
+          apply sizeOf_decrease_priority_le
+        case isFalse h =>
+          -- else branch, queue unchanged
+          injection acc with h_dist h_queue
+          subst h_queue
+          exact le_refl _
+      calc
+        BinaryHeap.sizeOf (Prod.snd (List.foldl f (dist', queue') vs)) ≤ BinaryHeap.sizeOf queue'
+          := ih dist' queue'
+        _ ≤ BinaryHeap.sizeOf q := hle
 
-noncomputable def dijkstra_rec [Nonempty V] (g: FinSimpleGraph V) (source : V) (target : V) (dist : V → Nat) (queue : BinaryHeap V) : V → Nat :=
+
+#check ENat
+
+noncomputable def dijkstra_rec [Nonempty V] (g: FinSimpleGraph V) (source : V) (target : V) (dist : V → ENat) (queue : BinaryHeap V) : V → ENat :=
   if queue.isEmpty then dist
   else
     let (u, queue') := queue.extract_min
     let (dist', queue'') := relaxNeighbors g u dist queue'
     dijkstra_rec g source target dist' queue''
-decreasing_by sorry
+termination_by BinaryHeap.sizeOf queue
+decreasing_by
+  apply BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false
+  simp only [*]
 
 
-noncomputable def dijkstra [Nonempty V] (g : FinSimpleGraph V) (source : V) (target : V) : V → Nat  :=
-  let inf := 1000000000 -- a large value to represent "infinity"
-  let dist : V → Nat := fun v => if v = source then 0 else inf -- distance map
+
+noncomputable def dijkstra [Nonempty V] (g : FinSimpleGraph V) (source : V) (target : V) : V → ENat  :=
+  let dist : V → ENat := fun v => if v = source then 0 else ⊤ -- distance map
   let queue := BinaryHeap.empty.add source 0 -- initialize BinaryHeap with source at priority 0
   dijkstra_rec g source target dist queue
 
