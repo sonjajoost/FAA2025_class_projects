@@ -210,8 +210,9 @@ lemma neverUnderestimates
 -- (i.e., `u ≠ s`). Otherwise initialization already matches.
 lemma positiveDistance_of_counterexample
   [Nonempty V]
-  (g : FinSimpleGraph V) (s t : V) (dist : V → ENat)
-  (u : V) (hu : dist u ≠ delta g s u) (u_ne_s : u ≠ s) :
+  (g : FinSimpleGraph V) (s : V) (u : V) (u_ne_s : u ≠ s)
+  (is_connected : SimpleGraph.Connected g.toSimpleGraph)
+  :
   0 < delta g s u := by
   -- If `u ≠ s` then `δ(s,u) ≠ 0` because `dist s u = 0 ↔ u = s`.
   unfold delta
@@ -220,7 +221,18 @@ lemma positiveDistance_of_counterexample
   intro hzero
   -- `hzero : delta g s u = 0` implies `u = s` by Mathlib's lemma, contradiction.
   have := (SimpleGraph.Reachable.dist_eq_zero_iff (G := g.toSimpleGraph) (u := s) (v := u))
-  sorry
+  -- Use connectivity to get reachability between s and u
+  rw [SimpleGraph.connected_iff_exists_forall_reachable] at is_connected
+  rcases is_connected with ⟨sink, hsink⟩
+  have hreachu : g.toSimpleGraph.Reachable sink u := hsink u
+  have hreachs : g.toSimpleGraph.Reachable sink s := hsink s
+  have hreachus : g.toSimpleGraph.Reachable s u := by
+    exact Reachable.trans (id (Reachable.symm hreachs)) (hsink u)
+  apply this at hreachus
+  rw [hreachus] at hzero
+  have u_e_s : u = s := by exact ((fun a ↦ a) ∘ fun a ↦ a) (id (Eq.symm hzero))
+  contradiction
+
 
 
 
@@ -231,7 +243,6 @@ lemma delta_adj_step_ENat
   (g : FinSimpleGraph V) (s u v : V)
   (hAdj : g.toSimpleGraph.Adj u v) :
   (delta g s v : ENat) ≤ (delta g s u : ENat) + 1 := by
-  classical
   -- Work in Nat first, then cast to ENat.
   have h_nat : delta g s v ≤ delta g s u + 1 := by
     unfold delta
@@ -257,7 +268,6 @@ lemma existsPredOnShortestPath
   `δ(s,y)+1 ≤ q.length+1 = pᵣ.length = δ(s,u)`. Conversely, the edge
   `(y,u)` gives `δ(s,u) ≤ δ(s,y)+1`. Therefore `δ(s,u) = δ(s,y)+1`.
   -/
-  classical
   -- Reachability follows from positive distance.
   have hconn : SimpleGraph.Reachable g.toSimpleGraph s u := by
     -- `delta g s u` is a natural number; positivity implies nonzero distance and thus reachability.
@@ -366,7 +376,6 @@ to focus on an easy-to-prove algorithmic invariant below.
 lemma mem_neighborFinset_adj
   (g : FinSimpleGraph V) (u v : V)
   (h : v ∈ g.neighborFinset u) : g.toSimpleGraph.Adj u v := by
-  classical
   -- Convert membership to the underlying SimpleGraph, then use the
     -- Convert membership to the underlying SimpleGraph and use the
     -- equivalence between neighborFinset membership and adjacency.
@@ -644,7 +653,8 @@ lemma dijkstra_source_zero
 
 theorem dijkstra_correctness
   [Nonempty V]
-  (g : FinSimpleGraph V) (s : V) :
+  (g : FinSimpleGraph V) (s : V)
+  (is_connected: SimpleGraph.Connected g.toSimpleGraph):
   ∀ v : V, (dijkstra g s v) v = delta g s v := by
   classical
   -- We prove correctness via a minimal-counterexample/shortest-path argument.
@@ -682,7 +692,7 @@ theorem dijkstra_correctness
     exact hu_ne heq
 
   have hpos : 0 < delta g s u := by
-    exact positiveDistance_of_counterexample g s v dist u hu_ne u_ne_s
+    exact positiveDistance_of_counterexample g s u u_ne_s is_connected
   obtain ⟨y, hyu_adj, hδ⟩ := existsPredOnShortestPath g s u hpos
   -- By minimality of `u`, every vertex strictly closer than `u` is
   -- already correct; in particular `y` is correct.
