@@ -539,72 +539,9 @@ lemma relaxNeighbors_preserves_lowerBound
 lemma relaxNeighbors_preserves_source_zero
   (g : FinSimpleGraph V) (source u : V)
   (dist : V → ENat) (q : BinaryHeap V)
-  (h0 : dist source = 0) :
-  (Prod.fst (relaxNeighbors g u dist q)) source = 0 := by
-  -- Induction on the neighbor list of `u`.
-  let neighbors := (g.neighborFinset u).val.toList
-  let f := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
-    let (dist, queue) := acc
-    let alt := dist u + 1
-    if alt < dist v then
-      let dist' : V → ENat := fun x => if x = v then alt else dist x
-      let queue' := queue.decrease_priority v alt
-      (dist', queue')
-    else
-      (dist, queue)
-  unfold relaxNeighbors
-  induction neighbors generalizing dist q with
-  | nil =>
-    have h3: neighbors = List.nil := by sorry
-    -- unfold relaxNeighbors
-    simp_all [neighbors]
-  | cons v vs ih =>
-    simp [relaxNeighbors, f]
-    --dsimp [f]
-    set alt := dist u + 1 with halt
-    by_cases hupd : alt < dist v
-    · -- update at `v` case
-      let dist' := fun x => if x = v then alt else dist x
-      let q' := q.decrease_priority v alt
-      by_cases hv : v = source
-      · -- would require `alt < dist source = 0`, impossible
-        subst hv
-        have : alt < 0 := by simpa [h0] using hupd
-        simp at this
-      · -- source unchanged, apply IH to tail
-        have hdist' : dist' source = 0 := by simp_all [hv, h0]; grind
-        specialize ih dist' q' hdist'
-        -- Show the head-step equals the updated accumulator, rewrite the fold, then apply IH.
-        have head_eq : f (dist, q) v = (dist', q') := by
-          dsimp [f]
-          rw [if_pos hupd]
-        -- The goal contains an explicit lambda using `Prod.fst`/`Prod.snd`.
-        -- Prove this lambda equals `f` by extensionality so we can rewrite
-        -- the goal to use `f` and finish with `List.foldl_cons` + `head_eq`.
-        have fun_eq_f :
-          (fun (acc : (V → ENat) × BinaryHeap V) (v' : V) =>
-            if (Prod.fst acc) u + 1 < (Prod.fst acc) v' then
-              (fun x => if x = v' then (Prod.fst acc) u + 1 else (Prod.fst acc) x,
-                BinaryHeap.decrease_priority (Prod.snd acc) v' ((Prod.fst acc) u + 1))
-            else acc) = f := by
-          funext acc v'
-          cases acc with
-          | mk dist0 queue0 =>
-            dsimp [f]
-        -- Rewrite the explicit lambda to `f` in the goal, then use the
-        -- fold-cons rewrite + `head_eq` to reduce to `ih`.
-        rw [fun_eq_f]
-        rw [fun_eq_f] at ih
-        have hn: (g.neighborFinset u).val.toList = v :: vs := by sorry
-        rw [hn]
-        calc
-          (List.foldl f (dist, q) (v :: vs)).1 source
-            = (List.foldl f (f (dist, q) v) vs).1 source := by rw [List.foldl_cons]
-          _ = (List.foldl f (dist', q') vs).1 source := by rw [head_eq]
-          _ = 0 := by sorry
-    · -- no update at head; proceed to tail
-      have hdist_tail := ih dist q h0
-      exact hdist_tail
+  (h0 : dist source = 0)
+  (h1 := relaxNeighbors g u dist q):
+  (Prod.fst h1) source = 0 := by sorry
 
 
 -- The recursive Dijkstra preserves `dist source = 0`.
@@ -613,20 +550,28 @@ lemma dijkstra_rec_preserves_source_zero
   (g : FinSimpleGraph V) (source target : V) :
   ∀ (dist : V → ENat) (queue : BinaryHeap V), dist source = 0 → (dijkstra_rec g source target dist queue) source = 0 := by
   intro dist queue h
-  -- Strong induction on the heap size measure used for termination.
-  let n := BinaryHeap.sizeOf queue
-  induction n using Nat.strong_induction_on
+  generalize hsize : BinaryHeap.sizeOf queue = n
+  revert queue dist hsize
+  induction' n using Nat.strong_induction_on with n ih
   expose_names
-  -- intro dist queue hsize hdist0
-  dsimp [dijkstra_rec]
+  intro dist queue hdist qsize
+
   by_cases hq : queue.isEmpty
-  · simp [dijkstra_rec, hq, h]
+  · simp [dijkstra_rec, hq, hdist]
   -- Non-empty case: extract min, relax neighbors, recurse on smaller heap
-  · have hne : queue.isEmpty = false := hq
+  · have hne : queue.isEmpty = false := by exact eq_false_of_ne_true hq
+    unfold dijkstra_rec
+    simp [hq]
+
+
     let (u, queue') := queue.extract_min
-    let (dist', queue'') := relaxNeighbors g u dist queue'
-    -- dist' preserves source = 0
-    have dist'_src_zero : dist' source = 0 := by sorry
+    set h1 := relaxNeighbors g u dist queue'
+    --let (dist', queue'') := h1
+    let dist' := Prod.fst h1
+    let queue'' := Prod.snd h1
+    have dist'_src_zero : dist' source = 0 :=
+      relaxNeighbors_preserves_source_zero g source u dist queue' hdist h1
+
     -- size decreases: sizeOf queue'' ≤ sizeOf queue' and sizeOf queue' < n
     have hq'_lt : BinaryHeap.sizeOf queue' < BinaryHeap.sizeOf queue :=
       BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false queue hne
@@ -634,9 +579,16 @@ lemma dijkstra_rec_preserves_source_zero
       sizeOf_relaxNeighbors_le g u dist queue'
     have hq''lt : BinaryHeap.sizeOf queue'' < BinaryHeap.sizeOf queue := by
       exact lt_of_le_of_lt hq''le hq'_lt
+    have hq''lt' : BinaryHeap.sizeOf queue'' < n := by exact Nat.lt_of_lt_of_eq hq'_lt qsize
     -- Apply IH to smaller size
-    have myrec := h_1 (BinaryHeap.sizeOf queue'') hq''lt dist' queue'' dist'_src_zero
-    exact myrec
+    have := ih
+      (BinaryHeap.sizeOf queue'')
+      hq''lt'
+      dist'
+      queue''
+      dist'_src_zero
+      rfl
+    exact this
 
 
 -- The final dijkstra map keeps the source at 0.
@@ -656,7 +608,6 @@ theorem dijkstra_correctness
   (g : FinSimpleGraph V) (s : V)
   (is_connected: SimpleGraph.Connected g.toSimpleGraph):
   ∀ v : V, (dijkstra g s v) v = delta g s v := by
-  classical
   -- We prove correctness via a minimal-counterexample/shortest-path argument.
   -- To keep focus on structure, we assume a few standard Dijkstra invariants
   -- as helper lemmas (stated below this proof) and use them here.
