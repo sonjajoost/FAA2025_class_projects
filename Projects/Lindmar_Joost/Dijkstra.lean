@@ -540,8 +540,72 @@ lemma relaxNeighbors_preserves_source_zero
   (g : FinSimpleGraph V) (source u : V)
   (dist : V → ENat) (q : BinaryHeap V)
   (h0 : dist source = 0)
-  (h1 := relaxNeighbors g u dist q):
-  (Prod.fst h1) source = 0 := by sorry
+  (h1 := relaxNeighbors g u dist q)
+  (h1' : h1 = relaxNeighbors g u dist q)
+  :
+  (Prod.fst h1) source = 0 := by
+
+  -- A small helper assumption about ENat: adding 1 is never < 0.
+  -- We keep it as a placeholder as permitted.
+  have enat_add_one_not_lt_zero : ∀ x : ENat, ¬ x + 1 < 0 := by
+    -- This follows from monotonicity of addition and 0 ≤ x + 1.
+    -- Placeholder; can be discharged from ENat arithmetic.
+    intro x; exact not_lt_zero
+
+  -- Unfold relaxNeighbors into a fold over the neighbor list with a step function.
+  let neighbors := (g.neighborFinset u).val.toList
+  let f := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
+    let (d, pq) := acc
+    let alt := d u + 1
+    if alt < d v then
+      let d' : V → ENat := fun x => if x = v then alt else d x
+      let pq' := pq.decrease_priority v alt
+      (d', pq')
+    else
+      (d, pq)
+
+  -- One-step preservation: after processing any neighbor v once, the value at `source` remains 0.
+  have step_preserve : ∀ (d : V → ENat) (pq : BinaryHeap V) (v : V),
+      d source = 0 → (Prod.fst (f (d, pq) v)) source = 0 := by
+    intro d pq v h0'
+    dsimp [f]
+    set alt := d u + 1 with halt
+    by_cases hv : source = v
+    · subst hv
+      have hfalse : ¬ alt < d source := by
+        simp [h0']
+      by_cases h : alt < d source
+      · exact False.elim (hfalse h)
+      · simp [h0']
+    · by_cases h : alt < d v
+      · simp [h, hv, h0']
+      · simp [h, h0']
+
+  -- Fold preservation over the entire neighbor list.
+  have fold_preserve : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
+      d source = 0 → (Prod.fst (List.foldl f (d, pq) l)) source = 0 := by
+    intro l
+    induction l with
+    | nil =>
+      intro d pq h0'
+      simp [List.foldl, h0']
+    | cons v vs ih =>
+      intro d pq h0'
+      cases acc : f (d, pq) v with
+      | mk d' pq' =>
+        -- After one step, the source entry remains 0.
+        have h0'' : d' source = 0 := by
+          have := step_preserve d pq v h0'
+          simpa [acc] using this
+        -- Recurse on the tail of the list.
+        have := ih d' pq' h0''
+        simpa [List.foldl, f, acc]
+
+  -- Apply the fold preservation to the specific neighbor list and step function used by relaxNeighbors.
+  have : (Prod.fst (List.foldl f (dist, q) neighbors)) source = 0 :=
+    fold_preserve neighbors dist q h0
+  have h1' : h1 =  relaxNeighbors g u dist q := by exact h1'
+  simpa [relaxNeighbors, neighbors, f, h1'] using this
 
 
 -- The recursive Dijkstra preserves `dist source = 0`.
@@ -566,11 +630,12 @@ lemma dijkstra_rec_preserves_source_zero
 
     let (u, queue') := queue.extract_min
     set h1 := relaxNeighbors g u dist queue'
+    have h1' : h1 = relaxNeighbors g u dist queue' := by grind
     --let (dist', queue'') := h1
     let dist' := Prod.fst h1
     let queue'' := Prod.snd h1
     have dist'_src_zero : dist' source = 0 :=
-      relaxNeighbors_preserves_source_zero g source u dist queue' hdist h1
+      relaxNeighbors_preserves_source_zero g source u dist queue' hdist h1 h1'
 
     -- size decreases: sizeOf queue'' ≤ sizeOf queue' and sizeOf queue' < n
     have hq'_lt : BinaryHeap.sizeOf queue' < BinaryHeap.sizeOf queue :=
