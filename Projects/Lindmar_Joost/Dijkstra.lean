@@ -322,11 +322,13 @@ lemma relaxNeighbors_preserves_lowerBound
   sorry
 
 -- Dijkstra never underestimates the true graph distance.
+
 lemma neverUnderestimates
   [Nonempty V]
   (g : FinSimpleGraph V) (s t : V) :
   ∀ u : V, (delta g s u : ENat) ≤ (dijkstra g s t) u := by
-  intro u; sorry
+  intro u
+  sorry
 
 -- For a genuine counterexample `u`, the distance from `s` must be positive
 -- (i.e., `u ≠ s`). Otherwise initialization already matches.
@@ -521,7 +523,6 @@ lemma relaxAdj_final_bound
       else
         (dist, queue)
     -- We proceed by induction on the neighbor list.
-    classical
     -- `u` is adjacent to `y`, hence appears in the neighbor list.
     have hu_mem_fin : u ∈ g.neighborFinset y := adj_mem_neighborFinset g y u hAdj
     have hu_mem_list : u ∈ neighbors := by
@@ -550,7 +551,7 @@ lemma relaxAdj_final_bound
       dsimp [f]
       by_cases hlt : d y + 1 < d v
       · grind
-      · simp [hlt, hv_ne, hbound]
+      · simp [hlt, hbound]
 
     -- Helper: preserving bound when folding over a list that does not contain `u`.
     have preserve_no_u : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
@@ -563,7 +564,7 @@ lemma relaxAdj_final_bound
         intro d pq hu_not hb
         have hv_ne_u : v ≠ u := by
           have : u ∉ v :: vs := hu_not
-          simp [List.mem_cons]
+          simp
           grind
         cases hacc : f (d, pq) v with
         | mk d' pq' =>
@@ -588,7 +589,7 @@ lemma relaxAdj_final_bound
               · have hfalse : False := by
                   have hle : d y ≤ d y + 1 := by
                     have : (0 : ℕ∞) ≤ 1 := by decide
-                    simp [zero_add] --using add_le_add_left this (d y)
+                    simp
                   have hlt' : d y + 1 < d y := by
                     simpa [hyv] using hlt
                   have h : d y < d y :=
@@ -596,7 +597,7 @@ lemma relaxAdj_final_bound
                   exact lt_irrefl _ h
                 exact hfalse.elim
               · simp [hyv]
-            · simp_all [f, hlt]
+            · simp_all [f]
           -- Rewrite the target bound to d' y + 1
           have hb'' : d' u ≤ d' y + 1 := by
             rw [hdy]
@@ -639,7 +640,7 @@ lemma relaxAdj_final_bound
                   cases hacc-- with hd hq
                   expose_names
                   exact left.symm
-                simp [this, hv_ne_y]
+                simp [this]
                 grind
               · -- Otherwise f (d,pq) u = (d, pq)
                 have : d1 = d := by
@@ -662,8 +663,6 @@ lemma relaxAdj_final_bound
               -- use the one-step bound at `u` and `h_d1y : d1 y = d y`
               have h_step : (Prod.fst (f (d, pq) u)) u ≤ d y + 1 := step_u_bound d pq
               simpa [hacc, h_d1y] using h_step
-
-
         | inr hu_in_vs =>
           -- Process `v` first (note `v ≠ u` from membership), then apply IH to `vs`.
           have hv_ne_u : v ≠ u := by
@@ -677,9 +676,9 @@ lemma relaxAdj_final_bound
             have hdy : d' y = d y := by
               simp [f] at hacc
               by_cases hlt : d y + 1 < d v
-              · simp_all [f, hlt, hv_ne_y]
+              · simp_all [f]
                 grind
-              · simp_all [f, hlt]
+              · simp_all [f]
             have hih := ih d' q' hnodup_vs hAllNe_vs hu_in_vs
             -- Rewrite the target fold and `d' y`.
             simpa [List.foldl, f, hacc, hdy] using hih
@@ -692,8 +691,7 @@ lemma relaxAdj_final_bound
       have hvF : v ∈ (g.neighborFinset y) := by
         simpa [neighbors] using (Finset.mem_toList.mp hv)
       have hAdj : g.toSimpleGraph.Adj y v := mem_neighborFinset_adj g y v hvF
-      have hIr : ¬ g.toSimpleGraph.Adj y y := by
-        simpa using (SimpleGraph.adj_irrefl (G := g.toSimpleGraph) y)
+      have hIr : ¬ g.toSimpleGraph.Adj y y := by simp
       intro hEq; subst hEq; exact hIr.elim hAdj
 
     -- Apply the main lemma to the concrete neighbor list.
