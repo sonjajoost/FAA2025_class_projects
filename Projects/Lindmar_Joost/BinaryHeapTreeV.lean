@@ -34,7 +34,7 @@ namespace BinaryTree
 @[grind] def getLast: BinaryTree α → Option α ×  BinaryTree α
 | leaf => (none, leaf)
 | node l v r => match l, r with
-    | leaf, leaf => (some v, node l v r)
+    | leaf, leaf => (some v, leaf)
     | leaf, _ => let (val, tree) := (getLast r)
       (val, node l v tree)
     | _, _ => let (val, tree) := (getLast l)
@@ -449,9 +449,81 @@ fun_induction getLast generalizing l v r; all_goals (expose_names; try grind)
     use (node bt' v_1 r_1), v'
     grind
 
-lemma extractMinPreservesMembersExceptRoot (bt l r: BinaryTree α) (v v'': α) (f: α → ENat): bt = node l v r  → isMinHeap bt f → contains bt v' → v ≠  v' → contains (extractMin bt f).2 v' := by
+lemma getLastPreservesMembersExceptLast (bt l r: BinaryTree α) (v v': α): bt = node l v r → contains bt v' → (getLast bt).1 ≠ some v' → contains (getLast bt).2 v' := by
+intros hbt hbtc hv
+fun_induction getLast generalizing l r v; all_goals (expose_names; try grind)
+. simp
+  cases r_1
+  . contradiction
+  . expose_names
+    cases a
+    . cases a_2
+      . simp [getLast]
+        grind
+      . simp [getLast]
+        grind
+    . cases a_2
+      . simp [getLast]
+        grind
+      . simp [getLast]
+        grind
+. simp
+  cases l_1
+  . contradiction
+  . expose_names
+    cases a
+    . cases a_2
+      . simp [getLast]
+        grind
+      . simp [getLast]
+        grind
+    . cases a_2
+      . simp [getLast]
+        grind
+      . simp [getLast]
+        grind
+
+
+lemma extractMinPreservesMembersExceptRoot (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r  → isMinHeap bt f → contains bt v' → v ≠  v' → contains (extractMin bt f).2 v' := by
   intros; expose_names
-  sorry
+
+  have hex: ∃ bt' v'', (some v'', bt') = getLast bt := by
+    apply getLastNode bt l r v h
+  obtain ⟨bt', v'', hv⟩ := hex
+  have hlr: contains l v' ∨ contains r v' :=
+    by grind
+  rw [h] at hv
+  rw [h]
+  cases bt'
+  . have: l = leaf := by grind
+    have: r = leaf := by grind
+    grind
+  . expose_names
+    have: a_1 = v := by
+      grind[getLastPreservesRoot]
+    have: a_1 ≠ v' := by grind
+    have: l≠ leaf ∨ r≠leaf := by grind
+    cases this; all_goals expose_names
+    . rw [extractMin]
+      rw [← hv]
+      simp
+      apply heapifyPreservesMembers (a.node v'' a_2) v' f
+      by_cases v'' = v'
+      . grind
+      . suffices (l.node v r).getLast.2.contains v' by grind
+        have hgl: (l.node v r).getLast.1 ≠ some v' := by grind
+        apply getLastPreservesMembersExceptLast (node l v r) l r v v' (rfl) (_) hgl
+        grind
+    . rw [extractMin]
+      rw [← hv]
+      simp
+      apply heapifyPreservesMembers (a.node v'' a_2) v' f
+      by_cases v'' = v'
+      . grind
+      . suffices (l.node v r).getLast.2.contains v' by grind
+        have hgl: (l.node v r).getLast.1 ≠ some v' := by grind
+        apply getLastPreservesMembersExceptLast (node l v r) l r v v' (rfl) (_) hgl
+        grind
 
 lemma extractMinCorrectNode (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r  → isMinHeap bt f → ∃ bt' v', extractMin bt f = (some v', bt') ∧ isMinHeap bt' f ∧ f v = heapMin bt f := by
   intros; expose_names
