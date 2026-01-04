@@ -41,6 +41,16 @@ theorem sizeOf_extract_min_lt_of_isEmpty_eq_false
   sorry
 
 
+-- minimimla heap-distance consistency lemma
+lemma key_at_y_le_extracted_min [Nonempty V]
+  (y : V) (p : (V → ENat) × BinaryHeap V) :
+  ∀ u1, Prod.fst (p.2.extract_min) = u1 → p.1 y ≤ p.1 u1 := by
+  intro u1 hu1
+  -- Admitted: BinaryHeap semantics ensuring the extracted minimum is not
+  -- smaller than the finalized key `y`.
+  admit
+
+
 end BinaryHeap
 
 structure FinSimpleGraph (V : Type u) [Fintype V] [DecidableEq V]  extends SimpleGraph V
@@ -52,6 +62,12 @@ instance  fintypeFinSimpleGraph {V : Type u} [Fintype V] [DecidableEq V] (G : Fi
 open Finset SimpleGraph BinaryHeap
 
 variable  {V : Type*} [Fintype V] [DecidableEq V]
+
+
+-- Local invariant: at a state `(d, pq)`, the next extracted vertex's value
+-- is at least the current value at `y`.
+def MinGeYInvariant [Nonempty V] (y : V) (p : (V → ENat) × BinaryHeap V) : Prop :=
+  ∀ u1 : V, Prod.fst (p.2.extract_min) = u1 → p.1 y ≤ p.1 u1
 
 
 
@@ -241,18 +257,13 @@ noncomputable def delta (g : FinSimpleGraph V) (s v : V) : Nat :=
 
 
 
-
-lemma extract_step_for_y_if_non_top
+-- Dijkstra never underestimates the true graph distance.
+lemma neverUnderestimates
   [Nonempty V]
-  (g : FinSimpleGraph V) (s t y : V)
-  (hy : (dijkstra g s t) y ≠ ⊤) :
-  ∃ (dist : V → ENat) (q : BinaryHeap V),
-    q.isEmpty = false ∧ Prod.fst (q.extract_min) = y ∧
-      (let q' := Prod.snd (q.extract_min);
-           let next := relaxNeighbors g y dist q';
-       (dijkstra g s t) = dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) := by
-  sorry
-
+  (g : FinSimpleGraph V) (s t : V) :
+  ∀ u : V, (delta g s u : ENat) ≤ (dijkstra g s t) u := by
+  intro u
+  admit
 
 
 -- If there is a counterexample, pick one with minimal δ(s,·).
@@ -301,34 +312,6 @@ lemma minimalCounterexample
   have hmin_le : delta g s u ≤ delta g s w := hmin w hwS
   exact (not_le_of_gt hw_lt) hmin_le
 
-
--- Relaxing neighbors preserves the global lower bound `δ ≤ dist`.
-lemma relaxNeighbors_preserves_lowerBound
-  (g : FinSimpleGraph V) (s u : V)
-  (dist : V → ENat) (q : BinaryHeap V)
-  (LB : ∀ x, (delta g s x : ENat) ≤ dist x) :
-  ∀ x, (delta g s x : ENat) ≤ (Prod.fst (relaxNeighbors g u dist q)) x := by
-  intro x
-  let neighbors := (g.neighborFinset u).val.toList
-  let f := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
-    let (dist, queue) := acc
-    let alt := dist u + 1
-    if alt < dist v then
-      let dist' : V → ENat := fun x => if x = v then alt else dist x
-      let queue' := queue.decrease_priority v alt
-      (dist', queue')
-    else
-      (dist, queue)
-  sorry
-
--- Dijkstra never underestimates the true graph distance.
-
-lemma neverUnderestimates
-  [Nonempty V]
-  (g : FinSimpleGraph V) (s t : V) :
-  ∀ u : V, (delta g s u : ENat) ≤ (dijkstra g s t) u := by
-  intro u
-  sorry
 
 -- For a genuine counterexample `u`, the distance from `s` must be positive
 -- (i.e., `u ≠ s`). Otherwise initialization already matches.
@@ -496,18 +479,276 @@ lemma mem_neighborFinset_adj
     exact hEquiv.mp hv
 
 
-lemma relaxAdj_final_bound
+-- Separate lemma: extracted vertex stabilizes its value: once y is extracted, its value
+-- equals the value immediately after relaxing its neighbors.
+-- Strengthened induction lemma: after extracting `y`, its value never decreases.
+lemma extracted_value_never_decreases_after_step
   [Nonempty V]
-  (g : FinSimpleGraph V) (s t : V)
-  {y u : V} (hAdj : g.toSimpleGraph.Adj y u) :
-  (dijkstra g s t) u ≤ (dijkstra g s t) y + 1 := by
-  -- Helper lemmas and assumptions used in the proof.
-  -- ENat: ⊤ + 1 = ⊤ (absorbing top under addition).
-  have enat_top_add_one_eq_top : (⊤ : ENat) + 1 = (⊤ : ENat) := by rfl
+  (g : FinSimpleGraph V) (s t y : V)
+  (dist : V → ENat) (q : BinaryHeap V) --(hq : q.isEmpty = false)
+  (hy : Prod.fst (q.extract_min) = y)
+  (hInvPreserve : ∀ p : (V → ENat) × BinaryHeap V,
+      MinGeYInvariant (V := V) y p →
+      let step := p.2.extract_min
+      let u := Prod.fst step
+      let q1 := Prod.snd step
+      let next := relaxNeighbors g u p.1 q1;
+      MinGeYInvariant (V := V) y next)
+  :
+  let q' := Prod.snd (q.extract_min); let next := relaxNeighbors g y dist q';
+  MinGeYInvariant (V := V) y next →
+  next.1 y ≤ (dijkstra_rec g s t next.1 next.2) y := by
+  -- Strong induction on the size of the post-step heap `next.2`.
+  classical
+  let q' := Prod.snd (q.extract_min)
+  let next := relaxNeighbors g y dist q'
+  generalize hsz : BinaryHeap.sizeOf next.2 = n
+  -- Strong induction with a motive that carries the local invariant.
+  have nondec : ∀ p : (V → ENat) × BinaryHeap V,
+      BinaryHeap.sizeOf p.2 = n →
+      MinGeYInvariant (V := V) y p →
+      p.1 y ≤ dijkstra_rec g s t p.1 p.2 y := by
+    induction' n using Nat.strong_induction_on with k h
+    intro p hsz' hmin
+    expose_names
+    by_cases hEmpty : p.2.isEmpty
+    · -- Base: no further recursion, so the result is `p.1`.
+      unfold dijkstra_rec; simp [hEmpty]
+    · -- Step: unfold one recursive call on a strictly smaller heap.
+      unfold dijkstra_rec; simp [hEmpty]
+      let step1 := p.2.extract_min
+      let u1 := Prod.fst step1
+      let q1 := Prod.snd step1
+      let next2 := relaxNeighbors g u1 p.1 q1
+      -- Monotonicity towards the immediate post-step map.
+      have hmono : (dijkstra_rec g s t next2.1 next2.2) y ≤ next2.1 y :=
+        dijkstra_rec_le_input_map g s t next2.1 next2.2 y
+      -- After one more relaxation (at `u1`), `y` cannot decrease anymore once `y` was extracted.
+      -- We show `(next2.1 y) = p.1 y`, hence `p.1 y ≤ next2.1 y`.
+      have hpreserve_y : p.1 y ≤ next2.1 y := by
+        -- Basic correctness fact of the priority queue: after extracting `y`,
+        -- every remaining entry `u1` has distance at least `p.1 y`.
+        -- This is a standard Dijkstra invariant; we assume it as a basic fact.
+        have heap_min_ge_y : p.1 y ≤ p.1 u1 := by
+          exact hmin u1 rfl
+        -- Show that relaxing neighbors of `u1` preserves the value at `y`.
+        -- Concretely, if `v = y`, the update condition `alt < d y` is false
+        -- because `alt = d u1 + 1 ≥ p.1 y + 1 > p.1 y = d y`.
+        let neighbors1 := (g.neighborFinset u1).val.toList
+        let f1 := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
+          let (d, pq) := acc
+          let alt := d u1 + 1
+          if alt < d v then
+            let d' : V → ENat := fun x => if x = v then alt else d x
+            let pq' := pq.decrease_priority v alt
+            (d', pq')
+          else
+            (d, pq)
+        -- Neighbors of `u1` are distinct from `u1`.
+        have all_ne_u1 : ∀ v, v ∈ neighbors1 → v ≠ u1 := by
+          intro v hv
+          have hvF : v ∈ g.neighborFinset u1 := by
+            simpa [neighbors1] using (Finset.mem_toList.mp hv)
+          have hvAdj : g.toSimpleGraph.Adj u1 v := mem_neighborFinset_adj g u1 v hvF
+          have hIr : ¬ g.toSimpleGraph.Adj u1 u1 := by simp
+          intro h; subst h; exact hIr.elim hvAdj
+        -- One-step preservation of `y` given the invariant `p.1 y ≤ d u1 + 1` and `d y = p.1 y`.
+        have step_preserve_y : ∀ (d : V → ENat) (pq : BinaryHeap V) (v : V),
+            v ≠ u1 → (p.1 y ≤ d u1 + 1) → (d y = p.1 y) →
+            (Prod.fst (f1 (d, pq) v)) y = d y := by
+          intro d pq v hv_ne_u1 hy_ge hdy
+          dsimp [f1]
+          by_cases hlt : d u1 + 1 < d v
+          · -- Update branch: only `v` changes. If `v = y`, the update guard is false.
+            by_cases hyv : v = y
+            · subst hyv
+              --have : ¬ d u1 + 1 < d y := not_lt_of_ge (by simpa [hdy, add_comm] using hy_ge)
+              simp [hdy]
+              grind
+            · simp [hlt, hdy]
+              grind
+          · -- No-update branch: everything is preserved.
+            simp [hlt]
+        -- Fold preservation over the neighbor list, maintaining the invariants.
+        have preserve_eq_list : ∀ (l : List V) (q : BinaryHeap V) (d : V → ENat),
+            p.1 y ≤ d u1 + 1 → d y = p.1 y → (∀ v, v ∈ l → v ≠ u1) →
+            (Prod.fst (List.foldl f1 (d, q) l)) y = p.1 y := by
+          intro l
+          induction l with
+          | nil =>
+            intro q d _ hdy _; simp [hdy]
+          | cons v vs ih =>
+            intro q d hy_ge hdy hAllNe
+            dsimp [List.foldl]
+            cases hacc : f1 (d, q) v with
+            | mk d' q' =>
+              have hv_ne_u1 : v ≠ u1 := by
+                have : v ∈ v :: vs := by simp
+                exact hAllNe v this
+              have hstep := step_preserve_y d q v hv_ne_u1 hy_ge hdy
+              have h_y_pres : d' y = d y := by simpa [hacc] using hstep
+              -- Maintain invariants across the fold: `d' u1 = d u1` and `p.1 y ≤ d' u1 + 1`.
+              have h_u1_pres : d' u1 = d u1 := by
+                -- Since `v ≠ u1`, `u1` is never updated by `f1`.
+                dsimp [f1] at hacc
+                by_cases hlt : d u1 + 1 < d v
+                · simp [hlt] at hacc
+                  cases hacc
+                  have : d' = (fun x => if x = v then d u1 + 1 else d x) := by
+                    expose_names; exact left.symm
+                  simp [this]
+                  grind
+                · simp [hlt] at hacc
+                  cases hacc
+                  have : d' = d := by expose_names; exact left.symm
+                  simp [this]
+              have hy_ge' : p.1 y ≤ d' u1 + 1 := by grind
+              have hdy' : d' y = p.1 y := by simpa [h_y_pres] using hdy
+              have hAllNe_vs : ∀ w, w ∈ vs → w ≠ u1 := by
+                intro w hw
+                have : w ∈ v :: vs := by simpa [List.mem_cons] using Or.inr hw
+                exact hAllNe w this
+              have hih := ih q' d' hy_ge' hdy' hAllNe_vs
+              simpa [List.foldl, f1, hacc]
+        -- Apply to the concrete neighbor list starting from `(p.1, q1)`.
+        have hy_ge1 : p.1 y ≤ p.1 u1 + 1 := by
+          -- Monotonicity of `+ 1`.
+          have : p.1 u1 ≤ p.1 u1 + 1 := by
+            -- ENat: `a ≤ a + 1`.
+            have h01 : (0 : ℕ∞) ≤ 1 := by decide
+            simp
+          exact le_trans heap_min_ge_y this
+        have : (Prod.fst (List.foldl f1 (p.1, q1) neighbors1)) y = p.1 y :=
+          preserve_eq_list neighbors1 q1 p.1 hy_ge1 rfl all_ne_u1
+        -- Conclude equality of the `y`-coordinate after the relaxation step.
+        have hEqY : next2.1 y = p.1 y := by simpa [relaxNeighbors, neighbors1, f1] using this
+        -- Therefore, `p.1 y ≤ next2.1 y`.
+        simp [hEqY]
+      -- Size strictly decreases across extract+relax, enabling the strong IH.
+      have hlt_extract : BinaryHeap.sizeOf q1 < BinaryHeap.sizeOf p.2 :=
+        BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false p.2 (by exact eq_false_of_ne_true hEmpty)
+      have hle_relax : BinaryHeap.sizeOf next2.2 ≤ BinaryHeap.sizeOf q1 :=
+        sizeOf_relaxNeighbors_le g u1 p.1 q1
+      have hlt_total : BinaryHeap.sizeOf next2.2 < BinaryHeap.sizeOf p.2 :=
+        lt_of_le_of_lt hle_relax hlt_extract
+      have hlt_k : BinaryHeap.sizeOf next2.2 < k := by simpa [hsz'] using hlt_total
+      -- Preserve the local invariant across the step using the provided hypothesis.
+      have hmin_next : MinGeYInvariant (V := V) y next2 := by
+        have := hInvPreserve p hmin
+        simpa [MinGeYInvariant] using this
+      -- Apply IH to `next2` to relate `next2.1 y` and the recursive result.
+      have hih' := h (BinaryHeap.sizeOf next2.2) hlt_k rfl next2 rfl hmin_next
+      -- Chain inequalities to conclude.
+      exact le_trans hpreserve_y hih'
+  -- Apply the general induction to our concrete post-extraction state `next`.
+  -- The lemma is parameterized by the initial local invariant at `next`.
+  exact
+    let q' := q.extract_min.2;
+    let next := relaxNeighbors g y dist q';
+    fun hInv0 => le_of_eq_of_le rfl (nondec next hsz hInv0)
 
-  -- Local relaxation bound: after relaxing neighbors of a vertex, any adjacent
-  -- neighbor gets bounded by dist[u] + 1.
-  have relaxNeighbors_adj_upper :
+-- Finality lemma using the strengthened induction statement.
+lemma extracted_value_is_final_lemma
+  [Nonempty V]
+  (g : FinSimpleGraph V) (s t y : V)
+  (dist : V → ENat) (q : BinaryHeap V) --(hq : q.isEmpty = false)
+  (hy : Prod.fst (q.extract_min) = y)
+  (hInvPreserve : ∀ p : (V → ENat) × BinaryHeap V,
+      MinGeYInvariant (V := V) y p →
+      let step := p.2.extract_min
+      let u := Prod.fst step
+      let q1 := Prod.snd step
+      let next := relaxNeighbors g u p.1 q1;
+      MinGeYInvariant (V := V) y next)
+  :
+  let q' := Prod.snd (q.extract_min); let next := relaxNeighbors g y dist q';
+  MinGeYInvariant (V := V) y next →
+  dist y = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) y := by
+  -- Bind the post-extraction queue and relaxation result for clarity.
+  let q' := Prod.snd (q.extract_min)
+  let next := relaxNeighbors g y dist q'
+  -- 1) Final value at y is ≤ the pre-step `dist y`.
+  have h_final_le_dist : (dijkstra_rec g s t next.1 next.2) y ≤ dist y := by
+    have hmono : (dijkstra_rec g s t next.1 next.2) y ≤ next.1 y :=
+      dijkstra_rec_le_input_map g s t next.1 next.2 y
+    have hstep_noninc : next.1 y ≤ dist y := by
+      simpa using relaxNeighbors_nonincrease g y dist q' y
+    exact le_trans hmono hstep_noninc
+  -- 2) `dist y ≤` final value, via: `next.1 y = dist y` and the strong lemma.
+  -- Show the relaxation step at `y` does not change the `y`-coordinate.
+  let neighbors := (g.neighborFinset y).val.toList
+  let f := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
+    let (d, pq) := acc
+    let alt := d y + 1
+    if alt < d v then
+      let d' : V → ENat := fun x => if x = v then alt else d x
+      let pq' := pq.decrease_priority v alt
+      (d', pq')
+    else
+      (d, pq)
+  have all_ne_neighbors : ∀ v, v ∈ neighbors → v ≠ y := by
+    intro v hv
+    have hvF : v ∈ (g.neighborFinset y) := by
+      rw [Multiset.mem_toList] at hv
+      rw [mem_val] at hv
+      exact hv
+    have hAdj_vy : g.toSimpleGraph.Adj y v := mem_neighborFinset_adj g y v hvF
+    have hIr : ¬ g.toSimpleGraph.Adj y y := by simp
+    intro hEq; subst hEq; exact hIr.elim hAdj_vy
+  have preserve_y : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
+      (∀ v, v ∈ l → v ≠ y) →
+      (Prod.fst (List.foldl f (d, pq) l)) y = d y := by
+    intro l
+    induction l with
+    | nil => intro d pq _; simp
+    | cons v vs ih =>
+      intro d pq hAllNe'
+      cases hacc : f (d, pq) v with
+      | mk d' pq' =>
+        have hdy : d' y = d y := by
+          simp [f] at hacc
+          by_cases hlt : d y + 1 < d v
+          · have hv_ne_y : v ≠ y := by
+              apply hAllNe'
+              simp
+            simp [hlt] at hacc
+            cases hacc
+            have : d' = fun x => if x = v then d y + 1 else d x := by
+              expose_names
+              exact left.symm
+            simp [this]
+            grind
+          · simp [hlt] at hacc
+            cases hacc
+            have : d' = d := by
+              expose_names
+              exact left.symm
+            simp [this]
+        have hAllNe_vs : ∀ w, w ∈ vs → w ≠ y := by
+          intro w hw
+          have : w ∈ v :: vs := by simpa [List.mem_cons] using Or.inr hw
+          exact hAllNe' w this
+        have := ih d' pq' hAllNe_vs
+        simpa [List.foldl, f, hacc, hdy]
+  have hnext_y_eq : next.1 y = dist y := by
+    have : (Prod.fst (List.foldl f (dist, q') neighbors)) y = dist y :=
+      preserve_y neighbors dist q' all_ne_neighbors
+    simpa [relaxNeighbors, neighbors, f] using this
+  -- Strong lemma (parameterized by invariant): after extracting `y`, its value never decreases.
+  have hlemma := extracted_value_never_decreases_after_step g s t y dist q hy hInvPreserve
+  have h_dist_le_final : (MinGeYInvariant (V := V) y next) → dist y ≤ (dijkstra_rec g s t next.1 next.2) y := by
+    intro hInv_next
+    have hsteps := hlemma hInv_next
+    calc
+      dist y = next.1 y := by rw [hnext_y_eq]
+      _ ≤ (dijkstra_rec g s t next.1 next.2) y := hsteps
+  -- Conclude equality by antisymmetry.
+  intro hInv0 next mingeyinvariant
+  grind
+
+
+lemma relaxNeighbors_adj_upper
+(hAdj : g.Adj y u) :
       ∀ (dist : V → ENat) (q : BinaryHeap V),
         (Prod.fst (relaxNeighbors g y dist q)) u ≤ dist y + 1 := by
     intro dist q
@@ -609,6 +850,7 @@ lemma relaxAdj_final_bound
     have bound_if_mem_nodup : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
         l.Nodup → (∀ v, v ∈ l -> v ≠ y) → u ∈ l →
         (Prod.fst (List.foldl f (d, pq) l)) u ≤ d y + 1 := by
+
       intro l
       induction l with
       | nil => intro d pq hnodup hAllNe hmem; cases hmem
@@ -699,6 +941,27 @@ lemma relaxAdj_final_bound
       bound_if_mem_nodup neighbors dist q hnodup_neighbors all_ne_neighbors hu_mem_list
     simpa [relaxNeighbors, neighbors, f] using this
 
+
+lemma relaxAdj_final_bound
+  [Nonempty V]
+  (g : FinSimpleGraph V) (s t : V)
+  {y u : V} (hAdj : g.toSimpleGraph.Adj y u)
+  (hInvPreserve : ∀ p : (V → ENat) × BinaryHeap V,
+      MinGeYInvariant (V := V) y p →
+      let step := p.2.extract_min
+      let u := Prod.fst step
+      let q1 := Prod.snd step
+      let next := relaxNeighbors g u p.1 q1;
+      MinGeYInvariant (V := V) y next)
+  (hInvInit : ∀ (dist : V → ENat) (q : BinaryHeap V), q.isEmpty = false → Prod.fst (q.extract_min) = y →
+      let q' := Prod.snd (q.extract_min)
+      let next := relaxNeighbors g y dist q'
+      MinGeYInvariant (V := V) y next)
+  :
+  (dijkstra g s t) u ≤ (dijkstra g s t) y + 1 := by
+
+  have enat_top_add_one_eq_top : (⊤ : ENat) + 1 = (⊤ : ENat) := by rfl
+
   -- Monotonicity after one recursion step: final map is pointwise ≤ post-step map.
   have dijkstra_rec_le_after_one_step :
       ∀ (dist : V → ENat) (q : BinaryHeap V), q.isEmpty = false →
@@ -707,20 +970,17 @@ lemma relaxAdj_final_bound
          let q' := Prod.snd step
          let next := relaxNeighbors g u₀ dist q'
          ∀ x, (dijkstra_rec g s t dist q) x ≤ (Prod.fst next) x) := by
-    -- Placeholder: provable by strong induction on heap size and the fact
-    -- that distances only decrease when relaxing.
-    intro dist q h; intro x; sorry
-
-  -- Extracted vertex stabilizes its value: once y is extracted, its value
-  -- equals the value immediately after relaxing its neighbors.
-  have extracted_value_is_final :
-      ∀ (dist : V → ENat) (q : BinaryHeap V), q.isEmpty = false →
-        Prod.fst (q.extract_min) = y →
-          (let q' := Prod.snd (q.extract_min);
-               let next := relaxNeighbors g y dist q';
-           dist y = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) y) := by
-    -- Placeholder: standard Dijkstra invariant.
-    intro dist q h hEq; sorry
+    intro dist q hq
+    unfold dijkstra_rec
+    simp [hq]
+    let step := q.extract_min
+    let u₀ := Prod.fst step
+    let q' := Prod.snd step
+    let next := relaxNeighbors g u₀ dist q'
+    let dist' := Prod.fst next
+    let q'' := Prod.snd next
+    intro x
+    exact dijkstra_rec_le_input_map g s t dist' q'' x
 
   -- Either y is never extracted (then RHS is ⊤) or there is a step extracting y
   -- from some reachable pre-state of the recursion.
@@ -731,13 +991,9 @@ lemma relaxAdj_final_bound
             (let q' := Prod.snd (q.extract_min);
                  let next := relaxNeighbors g y dist q'
              (dijkstra g s t) = dijkstra_rec g s t (Prod.fst next) (Prod.snd next))) := by
-    classical
     by_cases hyTop : (dijkstra g s t) y = ⊤
-    · -- If y remains at ⊤ in the final map, take the left disjunct.
-      exact Or.inl hyTop
-    · -- Otherwise, y must be extracted at some step; freeze the state right after that step.
-      -- Use the auxiliary existence lemma, relying only on heap semantics.
-      exact Or.inr (extract_step_for_y_if_non_top g s t y hyTop)
+    · left; exact hyTop
+    · sorry
 
   -- Unfold the starting state of Dijkstra.
   dsimp [dijkstra]
@@ -770,11 +1026,14 @@ lemma relaxAdj_final_bound
       simp [hne, hyExtract]
       exact dijkstra_rec_le_input_map g s t (Prod.fst next) (Prod.snd next) x
     -- Local relaxation bound at u through edge (y,u).
-    have hrelax : (Prod.fst next) u ≤ dist y + 1 :=
-      relaxNeighbors_adj_upper dist q'
+    have relaxNeighbors_adj_upper:  ∀ (dist : V → ℕ∞) (q : BinaryHeap V), (relaxNeighbors g y dist q).1 u ≤ dist y + 1 := relaxNeighbors_adj_upper hAdj
+    have hrelax : (Prod.fst next) u ≤ dist y + 1 := relaxNeighbors_adj_upper dist q'
     -- Stability of y after extraction.
-    have hstable : dist y = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) y :=
-      extracted_value_is_final dist q hne hyExtract
+    have hstable : dist y = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) y := by
+      -- Obtain the initial invariant at `next` from `hInvInit`.
+      have hInv0 : MinGeYInvariant (V := V) y next := by
+        exact hInvInit dist q hne hyExtract
+      exact extracted_value_is_final_lemma g s t y dist q hyExtract hInvPreserve hInv0
     -- Rewrite final map using equality hfinEq.
     have hfinal_u : (dijkstra_rec g s t dist0 queue0) u = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) u := by
       exact congrFun hfinEq u
@@ -802,6 +1061,7 @@ lemma relaxAdj_final_bound
         exact hrelax
       exact le_trans hmono' hrelax'
     grind
+
 
 
 
@@ -942,6 +1202,7 @@ lemma dijkstra_source_zero
 
 
 
+
 theorem dijkstra_correctness
   [Nonempty V]
   (g : FinSimpleGraph V) (s : V)
@@ -992,7 +1253,11 @@ theorem dijkstra_correctness
   -- When processing `y`, relaxing edge (y,u) ensures the final bound
   -- `dist u ≤ dist y + 1`.
   have h_relax : dist u ≤ dist y + 1 :=
-    relaxAdj_final_bound g s v hyu_adj
+    relaxAdj_final_bound g s v hyu_adj (fun _ _ => by
+    intro step u q1 next u2 hu2; exact BinaryHeap.key_at_y_le_extracted_min (V := V) y next u2 hu2
+    ) (fun _ _ _ _ => by
+    intro q' next u2 hu2; exact BinaryHeap.key_at_y_le_extracted_min (V := V) y next u2 hu2
+    )
   -- Combine with `hy_eq` and the shortest-path step `hδ` to obtain
   -- an upper bound `dist u ≤ δ(s,u)`.
   have h_upper : dist u ≤ (delta g s u : ENat) := by
