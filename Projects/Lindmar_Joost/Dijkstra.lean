@@ -19,7 +19,6 @@ structure BinaryHeap (α : Type u) where
 namespace BinaryHeap
 
 def empty {α : Type u} : BinaryHeap α := { tree := BinaryTree.leaf }
-set_option linter.unusedVariables false
 def add {α : Type u} (h : BinaryHeap α) (v : α) (priority : Nat) : BinaryHeap α := sorry
 noncomputable def extract_min {α : Type u} [Nonempty α] (h : BinaryHeap α) : (α × BinaryHeap α) :=sorry
 
@@ -942,6 +941,110 @@ lemma relaxNeighbors_adj_upper
     simpa [relaxNeighbors, neighbors, f] using this
 
 
+lemma exists_extract_or_top [Nonempty V]
+  (g : FinSimpleGraph V) (s t : V)
+  {y u : V} (hAdj : g.toSimpleGraph.Adj y u)
+  (hInvPreserve : ∀ p : (V → ENat) × BinaryHeap V,
+      MinGeYInvariant (V := V) y p →
+      let step := p.2.extract_min
+      let u := Prod.fst step
+      let q1 := Prod.snd step
+      let next := relaxNeighbors g u p.1 q1;
+      MinGeYInvariant (V := V) y next)
+  (hInvInit : ∀ (dist : V → ENat) (q : BinaryHeap V), q.isEmpty = false → Prod.fst (q.extract_min) = y →
+      let q' := Prod.snd (q.extract_min)
+      let next := relaxNeighbors g y dist q'
+      MinGeYInvariant (V := V) y next)
+      :
+      (dijkstra g s t) y = ⊤ ∨
+      (∃ (dist : V → ENat) (q : BinaryHeap V),
+          q.isEmpty = false ∧ Prod.fst (q.extract_min) = y ∧
+            (let q' := Prod.snd (q.extract_min);
+                 let next := relaxNeighbors g y dist q'
+             (dijkstra g s t) = dijkstra_rec g s t (Prod.fst next) (Prod.snd next))) := by
+    by_cases hyTop : (dijkstra g s t) y = ⊤
+    · left; exact hyTop
+    · right
+      dsimp [dijkstra] at hyTop
+      dsimp [dijkstra]
+
+      -- Initial state
+      set dist0 : V → ENat := fun v => if v = s then 0 else ⊤
+      set q0 := BinaryHeap.empty.add s 0
+
+      sorry
+
+/-
+      -- The search lemma with strong induction
+      have search :
+        ∀ (n : Nat), ∀ (d : V → ENat) (q : BinaryHeap V), BinaryHeap.sizeOf q ≤ n →
+          q.isEmpty = true ∧ d y = ⊤ ∨
+          ∃ (u : V) (q' : BinaryHeap V) (next : (V → ENat) × BinaryHeap V),
+            q'.sizeOf < n ∧
+            q.extract_min = (u, q') ∧
+            next = relaxNeighbors g u d q' ∧
+            (dijkstra_rec g s t d q y = dijkstra_rec g s t next.1 next.2 y) := by
+          -- Strong induction on heap size bound `n`
+          intro n
+          refine Nat.strong_induction_on n ?ih
+          intro n1 ih d q hle
+
+          by_cases hq : q.isEmpty
+          · left
+            simp [dijkstra_rec, hq]
+            -- to show q.isEmpty -> d y = ⊤
+            sorry
+          · let step := q.extract_min
+            let u := Prod.fst step
+            set q' := Prod.snd step
+            set next := relaxNeighbors g u d q'
+            right
+            use u, q', next
+            -- Here we prove the one-step recursion equality definitionally
+            --dsimp [dijkstra_rec, hq]
+            constructor
+            · -- size decreases strictly after extract_min
+              have hdec : BinaryHeap.sizeOf q' < BinaryHeap.sizeOf q :=
+                BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false q (by simp [hq])
+              exact lt_of_lt_of_le hdec hle
+            · constructor
+              · exact Prod.ext rfl rfl
+              · dsimp [hq]
+                constructor
+                · rfl
+                · -- use ih to finish this
+                  have hq'_lt : BinaryHeap.sizeOf q' < n1 := by
+                    have : BinaryHeap.sizeOf q' < BinaryHeap.sizeOf q :=
+                      BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false q (by simp [hq])
+                    exact lt_of_lt_of_le this hle
+                  have hnext_le : BinaryHeap.sizeOf next.2 ≤ BinaryHeap.sizeOf q' :=
+                    sizeOf_relaxNeighbors_le g u d q'
+                  have hnext_lt : BinaryHeap.sizeOf next.2 < n1 :=
+                    lt_of_le_of_lt hnext_le hq'_lt
+                  -- Apply the induction hypothesis to the smaller heap `next.2`
+                  -- Pass the concrete post-step state `(next.1, next.2)` and `rfl` for its size.
+                  have hIH := ih (BinaryHeap.sizeOf next.2) hnext_lt (next.1) (next.2) le_rfl
+                  cases hIH
+                  · expose_names
+                    simp_all
+                    sorry
+                  · expose_names
+                    obtain ⟨u_ih, q_ih, hextract, hsizes, hextract2, hextract3, ih2⟩ := h
+                    simp_all
+
+                    sorry
+
+
+      -- Apply the search predicate to the initial state `(dist0, q0)`.
+      have hsearch0 := search (BinaryHeap.sizeOf q0) dist0 q0 le_rfl
+      -- Since `(dijkstra g s t) y ≠ ⊤` by `hyTop`, the right branch holds.
+      cases hsearch0 with
+      | inl htop =>
+        -- Contradicts `hyTop`.
+        exact False.elim (hyTop htop)
+      | inr hexists => grind
+-/
+
 lemma relaxAdj_final_bound
   [Nonempty V]
   (g : FinSimpleGraph V) (s t : V)
@@ -962,46 +1065,13 @@ lemma relaxAdj_final_bound
 
   have enat_top_add_one_eq_top : (⊤ : ENat) + 1 = (⊤ : ENat) := by rfl
 
-  -- Monotonicity after one recursion step: final map is pointwise ≤ post-step map.
-  have dijkstra_rec_le_after_one_step :
-      ∀ (dist : V → ENat) (q : BinaryHeap V), q.isEmpty = false →
-        (let step := q.extract_min
-         let u₀ := Prod.fst step
-         let q' := Prod.snd step
-         let next := relaxNeighbors g u₀ dist q'
-         ∀ x, (dijkstra_rec g s t dist q) x ≤ (Prod.fst next) x) := by
-    intro dist q hq
-    unfold dijkstra_rec
-    simp [hq]
-    let step := q.extract_min
-    let u₀ := Prod.fst step
-    let q' := Prod.snd step
-    let next := relaxNeighbors g u₀ dist q'
-    let dist' := Prod.fst next
-    let q'' := Prod.snd next
-    intro x
-    exact dijkstra_rec_le_input_map g s t dist' q'' x
-
-  -- Either y is never extracted (then RHS is ⊤) or there is a step extracting y
-  -- from some reachable pre-state of the recursion.
-  have exists_extract_or_top :
-      (dijkstra g s t) y = ⊤ ∨
-      (∃ (dist : V → ENat) (q : BinaryHeap V),
-          q.isEmpty = false ∧ Prod.fst (q.extract_min) = y ∧
-            (let q' := Prod.snd (q.extract_min);
-                 let next := relaxNeighbors g y dist q'
-             (dijkstra g s t) = dijkstra_rec g s t (Prod.fst next) (Prod.snd next))) := by
-    by_cases hyTop : (dijkstra g s t) y = ⊤
-    · left; exact hyTop
-    · sorry
-
   -- Unfold the starting state of Dijkstra.
   dsimp [dijkstra]
   let dist0 : V → ENat := fun v => if v = s then 0 else ⊤
   let queue0 := BinaryHeap.empty.add s 0
 
   -- Apply the extraction/top dichotomy.
-  have hfinal_or_step := exists_extract_or_top
+  have hfinal_or_step := exists_extract_or_top g s t hAdj hInvPreserve hInvInit
   -- Replace (dijkstra g s t) with the definitional recursion from (dist0, queue0).
   -- Note: `exists_extract_or_top` is stated already in terms of `(dijkstra g s t)`.
   -- We perform case analysis on it.
