@@ -643,13 +643,13 @@ def decrease_priority [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α �
 {tree:= decreasePriority h.tree v prio}
 
 -- Helper lemma: decreasing priority does not increase heap size
-theorem heapSize_decrease_priority_le {α : Type u} [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α → ENat) :
+theorem sizeOf_decrease_priority_le {α : Type u} [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α → ENat) :
   sizeOf (decrease_priority h v prio) ≤ sizeOf h := by
   -- To be proved from the concrete heap implementation
   sorry
 
 -- Helper lemma: extracting the minimum from a non-empty heap strictly decreases its size.
-theorem heapSize_extract_min_lt_of_isEmpty_eq_false
+theorem sizeOf_extract_min_lt_of_isEmpty_eq_false
     {V : Type*} [Nonempty V] [DecidableEq V] (h : BinaryHeap V) (hNE : isEmpty h = false) (priority: V → ENat):
     sizeOf (Prod.snd (extract_min h priority (by grind))) < sizeOf h := by
   -- To be proved from the concrete heap implementation
