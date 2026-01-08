@@ -305,15 +305,21 @@ lemma positiveDistance_of_counterexample
 -- Along an edge, distances step by at most 1 (ENat form), problem is we need acyclicty for this
 lemma delta_adj_step_ENat
   (g : FinSimpleGraph V) (s u v : V)
-  (hAdj : g.toSimpleGraph.Adj u v) :
+  (hAdj : g.toSimpleGraph.Adj u v)
+  (is_connected: SimpleGraph.Connected g.toSimpleGraph) :
   (delta g s v : ENat) ≤ (delta g s u : ENat) + 1 := by
   -- Work in Nat first, then cast to ENat.
   have h_nat : delta g s v ≤ delta g s u + 1 := by
     unfold delta
-    -- Distance to an adjacent node increases by at most 1
-    have h:= (SimpleGraph.Adj.diff_dist_adj (G := g.toSimpleGraph) (u := s) (v := u) (w := v) hAdj)
-    simp [*]
-    grind
+    -- Use the triangle inequality and the fact that adjacent vertices
+    -- are at distance 1 to conclude the bound.
+    have htri : g.toSimpleGraph.dist s u ≤ g.toSimpleGraph.dist s u + g.toSimpleGraph.dist u v := by simp
+    have hdist_uv : SimpleGraph.dist (G := g.toSimpleGraph) u v = 1 := by simp; exact hAdj
+    calc
+      SimpleGraph.dist (G := g.toSimpleGraph) s v ≤ SimpleGraph.dist (G := g.toSimpleGraph) s u + SimpleGraph.dist (G := g.toSimpleGraph) u v := by  simp [SimpleGraph.Connected.dist_triangle (G := g.toSimpleGraph) is_connected]
+      _ = SimpleGraph.dist (G := g.toSimpleGraph) s u + 1 := by rw [hdist_uv]
+    -- `unfold delta` made the goal a statement about `SimpleGraph.dist`, so
+    -- the `calc` above proves the desired inequality.
   exact_mod_cast h_nat
 
 
@@ -321,7 +327,8 @@ lemma delta_adj_step_ENat
 -- adjacent to `u` with the distance stepping by one.
 lemma existsPredOnShortestPath
   (g : FinSimpleGraph V) (s u : V)
-  (hpos : 0 < delta g s u) :
+  (hpos : 0 < delta g s u)
+  (is_connected: SimpleGraph.Connected g.toSimpleGraph) :
   ∃ y : V, g.toSimpleGraph.Adj y u ∧ delta g s u = delta g s y + 1 := by
   /-
   Conceptual proof:
@@ -395,17 +402,9 @@ lemma existsPredOnShortestPath
         _ = delta g s u := by rw [hlen_pr]
     -- Second inequality: `δ(s,u) ≤ δ(s,y) + 1` via adjacency `(y,u)`.
     have h_ge : delta g s u ≤ delta g s y + 1 := by
-      -- Use the standard distance step along an edge.
-      have := SimpleGraph.Adj.diff_dist_adj (G := g.toSimpleGraph) (u := s) (v := y) (w := u) (SimpleGraph.Adj.symm hAdj)
-      simp_all [delta]
-      cases this
-      · simp_all
-      · expose_names
-        cases h
-        · simp_all
-        · expose_names
-          rw [h]
-          grind
+      -- Use the already proven lemma for ENat and cast back to Nat.
+      have hENat := delta_adj_step_ENat g s y u (SimpleGraph.Adj.symm hAdj) is_connected
+      exact_mod_cast hENat
     -- Conclude equality.
     exact Nat.le_antisymm h_ge h_le
 
@@ -1112,7 +1111,7 @@ lemma relaxNeighbors_preserves_source_zero
   have enat_add_one_not_lt_zero : ∀ x : ENat, ¬ x + 1 < 0 := by
     -- This follows from monotonicity of addition and 0 ≤ x + 1.
     -- Placeholder; can be discharged from ENat arithmetic.
-    intro x; exact not_lt_zero
+    intro x; exact ENat.not_lt_zero (x + 1)
 
   -- Unfold relaxNeighbors into a fold over the neighbor list with a step function.
   let neighbors := (g.neighborFinset u).val.toList
@@ -1272,7 +1271,7 @@ theorem dijkstra_correctness
 
   have hpos : 0 < delta g s u := by
     exact positiveDistance_of_counterexample g s u u_ne_s is_connected
-  obtain ⟨y, hyu_adj, hδ⟩ := existsPredOnShortestPath g s u hpos
+  obtain ⟨y, hyu_adj, hδ⟩ := existsPredOnShortestPath g s u hpos is_connected
   -- By minimality of `u`, every vertex strictly closer than `u` is
   -- already correct; in particular `y` is correct.
   have hy_lt_u : delta g s y < delta g s u := by simp [hδ]
