@@ -2,55 +2,15 @@ import Mathlib.Tactic
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Fintype.Basic
 import Mathlib.Combinatorics.SimpleGraph.Finite
-import Mathlib.Combinatorics.SimpleGraph.Walks.Maps
-import Mathlib.Combinatorics.SimpleGraph.Walks.Subwalks
+-- import Mathlib.Combinatorics.SimpleGraph.Walks.Maps
+-- import Mathlib.Combinatorics.SimpleGraph.Walks.Subwalks
 import Mathlib.Combinatorics.SimpleGraph.Metric
 import Mathlib.Data.List.Basic
 import Mathlib.Combinatorics.SimpleGraph.Acyclic
 import Mathlib.Combinatorics.SimpleGraph.Metric
+import Projects.Lindmar_Joost.BinaryHeapTreeV
 
-inductive BinaryTree (α : Type u)
-  | leaf : BinaryTree α
-  | node : BinaryTree α → α → BinaryTree α → BinaryTree α
-
-structure BinaryHeap (α : Type u) where
-  tree : BinaryTree α
-
-namespace BinaryHeap
-
-def empty {α : Type u} : BinaryHeap α := { tree := BinaryTree.leaf }
-def add {α : Type u} (h : BinaryHeap α) (v : α) (priority : Nat) : BinaryHeap α := sorry
-noncomputable def extract_min {α : Type u} [Nonempty α] (h : BinaryHeap α) : (α × BinaryHeap α) :=sorry
-
-def sizeOf {α : Type u} (h : BinaryHeap α) : Nat := sorry
-def isEmpty {α : Type u} (h : BinaryHeap α) : Bool := sorry
-def decrease_priority (h : BinaryHeap α) (v : α) (n : ENat) : BinaryHeap α := sorry
-
--- Helper lemma: decreasing priority does not increase heap size
-theorem sizeOf_decrease_priority_le {α : Type u} (h : BinaryHeap α) (v : α) (n : ENat) :
-  sizeOf (decrease_priority h v n) ≤ sizeOf h := by
-  -- To be proved from the concrete heap implementation
-  sorry
-
--- Helper lemma: extracting the minimum from a non-empty heap strictly decreases its size.
-theorem sizeOf_extract_min_lt_of_isEmpty_eq_false
-    {V : Type*} [Nonempty V] (h : BinaryHeap V) (hNE : h.isEmpty = false) :
-    sizeOf (Prod.snd (extract_min h)) < sizeOf h := by
-  -- To be proved from the concrete heap implementation
-  sorry
-
-
--- minimimla heap-distance consistency lemma
-lemma key_at_y_le_extracted_min [Nonempty V]
-  (y : V) (p : (V → ENat) × BinaryHeap V) :
-  ∀ u1, Prod.fst (p.2.extract_min) = u1 → p.1 y ≤ p.1 u1 := by
-  intro u1 hu1
-  -- Admitted: BinaryHeap semantics ensuring the extracted minimum is not
-  -- smaller than the finalized key `y`.
-  admit
-
-
-end BinaryHeap
+set_option autoImplicit true
 
 structure FinSimpleGraph (V : Type u) [Fintype V] [DecidableEq V]  extends SimpleGraph V
 
@@ -58,7 +18,7 @@ noncomputable
 instance  fintypeFinSimpleGraph {V : Type u} [Fintype V] [DecidableEq V] (G : FinSimpleGraph V) (v : V): Fintype (G.neighborSet v) :=  Fintype.ofFinite ↑(G.neighborSet v)
 
 
-open Finset SimpleGraph BinaryHeap
+open Finset SimpleGraph BinaryTree BinaryHeap
 
 variable  {V : Type*} [Fintype V] [DecidableEq V]
 
@@ -66,9 +26,7 @@ variable  {V : Type*} [Fintype V] [DecidableEq V]
 -- Local invariant: at a state `(d, pq)`, the next extracted vertex's value
 -- is at least the current value at `y`.
 def MinGeYInvariant [Nonempty V] (y : V) (p : (V → ENat) × BinaryHeap V) : Prop :=
-  ∀ u1 : V, Prod.fst (p.2.extract_min) = u1 → p.1 y ≤ p.1 u1
-
-
+  ∀ u1 : V, Prod.fst (p.2.extract_min p.1) = u1 → p.1 y ≤ p.1 u1
 
 noncomputable def relaxNeighbors (g : FinSimpleGraph V) (u : V) (dist : V → ENat) (queue : BinaryHeap V) : (V → ENat) × (BinaryHeap V) :=
   List.foldl

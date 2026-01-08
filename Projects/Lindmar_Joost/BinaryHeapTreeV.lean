@@ -2,13 +2,15 @@ import Mathlib.Tactic
 #check Nat.div2Induction
 #check ENat
 
-inductive BinaryTree (α : Type)
+set_option autoImplicit true
+
+inductive BinaryTree (α : Type u)
   | leaf : BinaryTree α
   | node : BinaryTree α → α → BinaryTree α → BinaryTree α
 
-#check BinaryTree
-set_option autoImplicit true
+
 namespace BinaryTree
+def insert (bt: BinaryTree α) (v: α) (f: α → ENat): BinaryTree α := sorry
 
 @[grind] def isMinHeap : BinaryTree α → (dist : α → ENat) → Prop
 | leaf, _ => true
@@ -69,15 +71,19 @@ match lastNode with
     | node _ lv _, leaf => f v <= f lv
     | node _ lv _, node _ rv _ =>  f v <= f lv ∧ f v <= f rv
 
-@[grind] def isEmpty (bt: BinaryTree α):= bt = leaf
 
 @[grind] def leftAndRightAreMinHeap: (BinaryTree α) →  (f: α → ENat) →  Prop
 | leaf, _ => true
 | node l _ r, f => isMinHeap l f ∧ isMinHeap r f
 
-@[grind] def contains: (BinaryTree α) → α → Prop
+@[grind] def contains : (BinaryTree α) → α → Prop
 | leaf, _ => false
-| node l v r, v' => v=v' ∨ contains l v' ∨ contains r v'
+| node l v r, v' => v = v' ∨ contains l v' ∨ contains r v'
+
+
+@[grind] def containsB [DecidableEq α] : (BinaryTree α) → α → Bool
+| leaf, _ => false
+| node l v r, v' => (v = v') ∨ containsB l v' ∨ containsB r v'
 
 lemma minHeapThenLeftAndRightAreMinHeap (bt: BinaryTree α) (f: α → ENat): isMinHeap bt f → leftAndRightAreMinHeap bt f := by
 intro hbt
@@ -202,14 +208,11 @@ grind only
 lemma binTreeEqL (l r l' r': BinaryTree α) (v v': α): (node l v r) = (node l' v' r') → l = l' := by
 grind only
 
--- lemma decreaseRootIsHeap (l r: BinaryTree α) (v v':  α): isMinHeap (node l v r) →  v' ≤ minHeap (node l v r) → isMinHeap (node l v' r) := by sorry
-
 lemma heapifyPreservesValues (tree r l: BinaryTree α) (v: α) (f: α → ENat): tree.heapify f = node r v l → contains tree v := by
 grind [contains, heapifyPreservesMembers2]
 
 lemma containsRootOrChildren (tree r l: BinaryTree α) (v v': α) : tree = node r v l → contains tree v' → contains r v' ∨ contains l v' ∨ v= v' := by
 grind [contains]
-
 
 lemma containsRootOrChildrenLeftLeaf (tree r: BinaryTree α) (v v':  α): tree = node r v leaf → contains tree v' → contains r v' ∨ v= v' := by
 grind [contains]
@@ -409,7 +412,6 @@ cases bt
 . grind[isMinHeap,leftAndRightAreMinHeap, heapify]
 . grind[isMinHeap,leftAndRightAreMinHeap, heapifyEstablishesMinHeap']
 
-
 lemma getLastPreservesMinHeap (bt: BinaryTree α) (f: α → ENat): isMinHeap bt f → isMinHeap (getLast bt).snd f := by
 intros; expose_names
 fun_induction isMinHeap; all_goals expose_names
@@ -483,7 +485,6 @@ fun_induction getLast generalizing l r v; all_goals (expose_names; try grind)
       . simp [getLast]
         grind
 
-
 lemma extractMinPreservesMembersExceptRoot (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r  → isMinHeap bt f → contains bt v' → v ≠  v' → contains (extractMin bt f).2 v' := by
   intros; expose_names
 
@@ -546,3 +547,122 @@ lemma extractMinCorrectNode (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt
         apply minHeapThenLeftAndRightAreMinHeap at this
         grind [leftAndRightAreMinHeap, heapifyEstablishesMinHeap]
       . grind [minHeapRootMin]
+
+lemma getLastReturnsSome {α : Type u} [DecidableEq α] (bt : BinaryTree α) (hbt: bt ≠ leaf): ∃ v, some v = (getLast bt).1 := by
+fun_induction getLast; all_goals grind
+
+lemma extractMinReturnsSome {α : Type u} [DecidableEq α] (bt : BinaryTree α) (f : α → ENat) (hbt: bt ≠ leaf): ∃ v, some v = (extractMin bt f).1 := by
+have: ∃ v, some v = (getLast bt).1 := by apply getLastReturnsSome bt hbt
+grind
+
+lemma extractMinIsSome {α : Type u} [DecidableEq α] (bt : BinaryTree α) (f : α → ENat) (hbt: bt ≠ leaf):(extractMin bt f).1.isSome := by
+have: ∃ v, some v = (getLast bt).1 := by apply getLastReturnsSome bt hbt
+grind
+
+def getParent [DecidableEq α]: BinaryTree α → α → Option (BinaryTree α)
+| leaf, _ => none
+| node l v r, v' => match l, r with
+    | leaf, leaf => none
+    | leaf, node _ rv _ => if rv = v' then (node l v r) else getParent r v'
+    | node _ lv _, leaf => if lv = v' then (node l v r) else getParent l v'
+    | node _ lv _, node _ rv _ =>   if  rv = v' ∨  lv = v'
+                                          then (node l v r)
+                                        else let b := getParent l v
+                                          match b with
+                                          | some _ => b
+                                          | none => getParent r v
+
+def emin (m: ENat) (n: ENat): ENat := if m ≤  n then m else n
+
+def dist_to_root [DecidableEq α]: (BinaryTree α) → α → ENat
+| leaf, _ => ⊤
+| node l v r, v' => if v' = v then 0 else 1 + (emin (dist_to_root l v') (dist_to_root r v'))
+
+def card: BinaryTree α → ENat
+| leaf => 0
+| node l _ r => 1 + card l + card r
+
+
+def siftUp [DecidableEq α] (bt: BinaryTree α) (f: α → ENat) (v': α): (BinaryTree α) := match bt with
+| leaf => leaf
+| node l v r => if v' = v then bt else match l, r with
+    | leaf, leaf => leaf
+    | leaf, node rl rv rr => if rv = v' then if f rv < f v then  (node l rv (node rl v rr)) else bt else siftUp r f v'
+    | node ll lv lr, leaf => if lv = v' then if f lv < f v then  (node (node ll v lr) lv r) else bt else siftUp l f v'
+    | node ll lv lr, node rl rv rr => if lv = v' then if f v' < f v then  (node (node ll v lr) lv r)
+                                      else if rv = v' then if f v' < f v then  (node l rv (node rl v rr))
+                                      else bt
+                                      else bt
+                                      else bt
+
+
+def decreasePriority [DecidableEq α] (bt: BinaryTree α)  (v': α) (f: α → ENat): (BinaryTree α) := sorry
+-- match bt with
+-- | leaf => leaf
+-- | node l v r => if v = v' then siftUp bt v
+--                     else let n := decreasePriority l v'
+--                       match n with
+--                       | none => decreasePriority r v'
+--                       | some _ => n
+
+
+-- def decreasePriority [DecidableEq α] (bt: BinaryTree α) (f: α → ENat) (v': α):  (BinaryTree α) :=
+-- let
+
+
+-- lemma decreasePriorityPreservesMembers [DecidableEq α] (bt: BinaryTree α) (v v': α) (f: α → ENat): contains bt v → contains (decreasePriority bt f v') v := by
+
+
+def size: (BinaryTree α) →  Nat
+| leaf => 0
+| node l _ r => 1 + size l + size r
+structure BinaryHeap (α : Type u) [DecidableEq α] where
+  tree : BinaryTree α
+
+#check BinaryTree
+
+namespace BinaryHeap
+
+def empty [DecidableEq α]: BinaryHeap α := { tree := BinaryTree.leaf }
+def isEmpty [DecidableEq α] (h: BinaryHeap α): Bool :=  match h.tree with
+| leaf => true
+| _ => false
+
+def add {α : Type u} [DecidableEq α] (h : BinaryHeap α) (v : α) (priority : α → ENat) : BinaryHeap α :=
+  {tree:= (h.tree.insert v priority)}
+
+lemma extractMinIsSomeHeap {α : Type u} [DecidableEq α] (h : BinaryHeap α) (f : α → ENat) (hh: ¬ isEmpty h): (extractMin h.tree f).1.isSome := by
+grind[isEmpty, extractMinIsSome]
+
+noncomputable def extract_min {α : Type u} [Nonempty α] [DecidableEq α] (h : BinaryHeap α) (priority : α → ENat) (hh: ¬ isEmpty h): (α × BinaryHeap α) :=
+  ((h.tree.extractMin priority).1.get (by grind[extractMinIsSomeHeap]) , {tree:= (h.tree.extractMin priority).2})
+
+def sizeOf {α : Type u} [DecidableEq α] (h : BinaryHeap α) : Nat := h.tree.size
+
+def decrease_priority [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α →  ENat) : BinaryHeap α :=
+{tree:= decreasePriority h.tree v prio}
+
+-- Helper lemma: decreasing priority does not increase heap size
+theorem heapSize_decrease_priority_le {α : Type u} [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α → ENat) :
+  sizeOf (decrease_priority h v prio) ≤ sizeOf h := by
+  -- To be proved from the concrete heap implementation
+  sorry
+
+-- Helper lemma: extracting the minimum from a non-empty heap strictly decreases its size.
+theorem heapSize_extract_min_lt_of_isEmpty_eq_false
+    {V : Type*} [Nonempty V] [DecidableEq V] (h : BinaryHeap V) (hNE : isEmpty h = false) (priority: V → ENat):
+    sizeOf (Prod.snd (extract_min h priority (by grind))) < sizeOf h := by
+  -- To be proved from the concrete heap implementation
+  sorry
+
+
+-- minimimla heap-distance consistency lemma
+lemma key_at_y_le_extracted_min [Nonempty V] [DecidableEq V]
+  (y : V) (p : (V → ENat) × BinaryHeap V) (priority: V → ENat) (hNE : isEmpty p.2 = false) :
+  ∀ u1, Prod.fst (p.2.extract_min priority (by grind)) = u1 → p.1 y ≤ p.1 u1 := by
+  intro u1 hu1
+  -- Admitted: BinaryHeap semantics ensuring the extracted minimum is not
+  -- smaller than the finalized key `y`.
+  admit
+
+end BinaryHeap
