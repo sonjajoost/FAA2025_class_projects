@@ -445,7 +445,7 @@ lemma extracted_value_never_decreases_after_step
   (hy : Prod.fst (q.extract_min dist sorry) = y)
   (hInvPreserve : ∀ p : (V → ENat) × BinaryHeap V,
       MinGeYInvariant (V := V) y p sorry →
-      let step := p.2.extract_min dist sorry
+      let step := p.2.extract_min p.1 sorry
       let u := Prod.fst step
       let q1 := Prod.snd step
       let next := relaxNeighbors g u p.1 q1;
@@ -472,7 +472,7 @@ lemma extracted_value_never_decreases_after_step
       unfold dijkstra_rec; simp [hEmpty]
     · -- Step: unfold one recursive call on a strictly smaller heap.
       unfold dijkstra_rec; simp [hEmpty]
-      let step1 := p.2.extract_min
+      let step1 := p.2.extract_min p.1
       let u1 := Prod.fst step1
       let q1 := Prod.snd step1
       let next2 := relaxNeighbors g u1 p.1 q1
@@ -611,7 +611,7 @@ lemma extracted_value_is_final_lemma
   (hy : Prod.fst (q.extract_min dist sorry) = y)
   (hInvPreserve : ∀ p : (V → ENat) × BinaryHeap V,
       MinGeYInvariant (V := V) y p sorry→
-      let step := p.2.extract_min dist sorry
+      let step := p.2.extract_min p.1 sorry
       let u := Prod.fst step
       let q1 := Prod.snd step
       let next := relaxNeighbors g u p.1 q1;
