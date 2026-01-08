@@ -98,7 +98,7 @@ lemma relaxNeighbors_nonincrease
     let alt := d u + 1
     if alt < d v then
       let d' : V → ENat := fun x => if x = v then alt else d x
-      let pq' := pq.decrease_priority v alt
+      let pq' := pq.decrease_priority v dist
       (d', pq')
     else
       (d, pq)
