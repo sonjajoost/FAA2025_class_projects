@@ -64,12 +64,9 @@ theorem sizeOf_relaxNeighbors_le
   simp [relaxNeighbors]
   induction (g.neighborFinset u).val.toList generalizing dist q with
   | nil =>
-    simp [relaxNeighbors]
-    ---have h := Nat.le_refl (BinaryHeap.sizeOf q)
-    --simp_all [relaxNeighbors, h, f]
-
+    simp
   | cons v vs ih =>
-    simp [relaxNeighbors]
+    simp
     specialize ih
     cases acc : f (dist, q) v with
     | mk dist' queue' =>
@@ -143,21 +140,8 @@ lemma relaxNeighbors_nonincrease
 
 
 
--- Assumption: In Dijkstra's algorithm, the initial queue contains all vertices
--- Therefore, after extraction, the remaining heap is non-empty (unless it was the last vertex)
--- For a connected graph with at least 2 vertices, we always have vertices remaining
-lemma extract_min_result_nonempty [Nonempty V] [Fintype V] (q : BinaryHeap V) (dist : V → ENat)
-  (hne : ¬q.isEmpty = true) :
-  (q.extract_min dist hne).2.isEmpty = false := by
-  -- After extracting one vertex from a queue that initially contains all vertices,
-  -- the remaining queue is non-empty if there are at least 2 vertices
-  -- This is a property we assume based on the algorithm's initialization
-  sorry
 
-lemma decrease_priority_preserves_isEmpty (q : BinaryHeap V) (v : V) (d' : V → ENat) :
-    (q.decrease_priority v d').isEmpty = q.isEmpty := by
-    -- decrease_priority should not change whether the heap is empty
-    sorry
+
 
 -- Helper lemma: if input heap is non-empty, relaxNeighbors result is also non-empty
 -- (because decrease_priority preserves the isEmpty status)
@@ -193,7 +177,7 @@ lemma relaxNeighbors_nonempty_of_input_nonempty [Nonempty V] (g : FinSimpleGraph
     split_ifs with hcond
     · -- After decrease_priority
       apply ih
-      rw [decrease_priority_preserves_isEmpty]
+      rw [BinaryHeap.decrease_priority_preserves_isEmpty]
       exact hqueue
     · -- Queue unchanged
       exact ih d queue hqueue
@@ -795,8 +779,7 @@ lemma extracted_value_is_final_lemma
   -- Strong lemma (parameterized by invariant): after extracting `y`, its value never decreases.
   have hlemma := extracted_value_never_decreases_after_step g s t y dist q hq hy hInvPreserve
   -- Conclude equality by antisymmetry, given an invariant at `next` with hhNext.
-  intro hhN hInvN
-  intro hhNext invariant
+  intro hhN hInvN hhNext invariant
   have hsteps := hlemma (by grind) invariant
   apply le_antisymm
   · grind
@@ -1455,20 +1438,11 @@ theorem dijkstra_correctness
     relaxAdj_final_bound g s v hyu_adj (fun _ _ => by
     intro step u q1 next u2 hu2;
     expose_names;
-    -- to show : MinGeYInvariant y hu2 ⋯
     have step' : MinGeYInvariant y x u := by simpa using step
     unfold MinGeYInvariant
     intro w hw
     have h1 := BinaryHeap.key_at_y_le_extracted_min y hu2 hu2.1 (by grind) hw
     exact h1
-
-    -- next is the result of extracting from x.2, which is non-empty (via step)
-    -- So next is non-empty by the algorithm invariant (all vertices start in queue)
-    --have helper2 : next.isEmpty = false := extract_min_result_nonempty x.2 x.1 step
-    --have helper : u2.2.isEmpty = false := by
-    --  have helper3 := relaxNeighbors_nonempty g q1 x.1 next helper2
-    --  grind
-    --exact BinaryHeap.key_at_y_le_extracted_min y u2 u2.1 helper hu2
     ) (fun _ _ _ _ => by
     intro q' next u2 hu2;
     expose_names

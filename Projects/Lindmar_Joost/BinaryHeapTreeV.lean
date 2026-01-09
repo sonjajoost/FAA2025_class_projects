@@ -665,4 +665,10 @@ lemma key_at_y_le_extracted_min [Nonempty V] [DecidableEq V]
   -- smaller than the finalized key `y`.
   admit
 
+
+lemma decrease_priority_preserves_isEmpty [DecidableEq V] (q : BinaryHeap V) (v : V) (d' : V → ENat) :
+    (q.decrease_priority v d').isEmpty = q.isEmpty := by
+    -- decrease_priority should not change whether the heap is empty
+    sorry
+
 end BinaryHeap
