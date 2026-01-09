@@ -762,7 +762,7 @@ fun_induction insert; all_goals expose_names
       right
       exact h_1
 
-def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
+@[grind] def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
   match bt1, bt2 with
   | leaf, t => t
   | t, leaf => t
@@ -772,7 +772,7 @@ def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
       else
         node (merge (node l1 v1 r1) l2 f) v2 r2
 
-def remove (bt : BinaryTree α) (x : α) (f : α → ENat)
+@[grind] def remove (bt : BinaryTree α) (x : α) (f : α → ENat)
   [DecidableEq α] : BinaryTree α :=
   match bt with
   | leaf => leaf
@@ -782,7 +782,7 @@ def remove (bt : BinaryTree α) (x : α) (f : α → ENat)
       else
         node (remove l x f) v (remove r x f)
 
-def decreasePriority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
+@[grind] def decreasePriority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
   insert (remove bt v f) v f
 
 lemma mergeLeftIdNodeIsNode (bt1 bt2 l1 r1: BinaryTree α) (f: α → ENat) (v1: α): bt1 = node l1 v1 r1 → ∃ l v r, merge bt1 bt2 f = node l v r := by
@@ -919,8 +919,20 @@ fun_induction merge
           grw [h]
         . apply minHeapThenMembersRightLe (l2.node v2 (a.node a_1 a_2)) l2 (a.node a_1 a_2) v2 a_1 f h2 (rfl) (by grind)
 
-lemma removeStructure [DecidableEq α] (bt l r: BinaryTree α): bt = node l v r →  remove bt x f = node l' v' r'  → f v ≤ f v' :=
-sorry
+lemma mergeNoNewMembers  (bt1 bt2 : BinaryTree α) (f : α → ENat): merge bt1 bt2 f = node l v r → contains bt1 v ∨ contains bt2 v := by
+fun_induction merge
+. grind
+. grind
+. grind
+. grind
+
+lemma removeNoNewMembers [DecidableEq α] (bt l r : BinaryTree α) (x v: α) (f: α → ENat): bt.remove x f = node l v r → contains bt v:= by
+fun_induction remove
+. grind
+. intros
+  expose_names
+  grind[mergeNoNewMembers]
+. grind[mergeNoNewMembers]
 
 lemma removePreservesMinHeap [DecidableEq α] (bt : BinaryTree α) (x : α) (f : α → ENat): isMinHeap bt f → isMinHeap (remove bt x f) f := by
 intro hmin
@@ -949,15 +961,22 @@ fun_induction remove
           simp[rootIsMinOfChildren]
         | node l'' v'' r'' =>
           simp[rootIsMinOfChildren]
-          sorry
+          have: contains r v'' := by grind[removeNoNewMembers]
+          apply minHeapThenMembersRightLe (l.node v r) l r v v'' f hmin (rfl) this
     | node l' v' r' =>
         cases hr : r.remove x f with
         | leaf =>
           simp[rootIsMinOfChildren]
-          sorry
+          have: contains l v' := by grind[removeNoNewMembers]
+          apply minHeapThenMembersLeftLe (l.node v r) l r v v' f hmin (rfl) this
         | node l'' v'' r'' =>
           simp[rootIsMinOfChildren]
-          sorry
+          constructor
+          . have: contains l v' := by grind[removeNoNewMembers]
+            apply minHeapThenMembersLeftLe (l.node v r) l r v v' f hmin (rfl) this
+          . have: contains r v'' := by grind[removeNoNewMembers]
+            apply minHeapThenMembersRightLe (l.node v r) l r v v'' f hmin (rfl) this
+
 
 theorem decreasePriorityPreservesMinHeap [DecidableEq α]  (bt: BinaryTree α) (v : α) (f : α → ENat): isMinHeap bt f → isMinHeap (decreasePriority bt v f) f := by
 intro hmin
