@@ -10,15 +10,19 @@ inductive BinaryTree (α : Type u)
 
 
 namespace BinaryTree
-def insert (bt: BinaryTree α) (v: α) (f: α → ENat): BinaryTree α := sorry
+
+
 
 @[grind] def isMinHeap : BinaryTree α → (dist : α → ENat) → Prop
 | leaf, _ => true
 | node l v r, f => match l, r with
       | leaf, leaf => true
-      | node _ lv _, leaf => f v <= f lv ∧ isMinHeap l f
-      | leaf, node _ rv _ => f v <= f rv ∧ isMinHeap r f
-      | node _ lv _, node _ rv _ => f v <= f lv ∧ isMinHeap l f ∧ f v <= f rv ∧ isMinHeap r f
+      | node _ lv _, leaf =>
+          f v <= f lv ∧ isMinHeap l f
+      | leaf, node _ rv _ =>
+          f v <= f rv ∧ isMinHeap r f
+      | node _ lv _, node _ rv _ =>
+          f v <= f lv ∧ isMinHeap l f ∧ f v <= f rv ∧ isMinHeap r f
 
 @[grind] def heapify (bt: BinaryTree α) (f: α → ENat): BinaryTree α := match bt with
 | leaf => bt
@@ -63,6 +67,7 @@ match lastNode with
                                       if f v <= f rv then f v
                                       else f rv
 
+
 @[grind] def rootIsMinOfChildren: (BinaryTree α) → (α → ENat) →  Prop
 | leaf, _ => true
 | node l v r, f => match l, r with
@@ -85,6 +90,16 @@ match lastNode with
 | leaf, _ => false
 | node l v r, v' => (v = v') ∨ containsB l v' ∨ containsB r v'
 
+@[grind] def insert (bt : BinaryTree α) (v : α) (f : α → ENat) : BinaryTree α :=
+  match bt with
+  | leaf =>
+      node leaf v leaf
+  | node l x r =>
+      if f v ≤ f x then
+        node (insert l x f) v r
+      else
+        node (insert l v f) x r
+
 lemma minHeapThenLeftAndRightAreMinHeap (bt: BinaryTree α) (f: α → ENat): isMinHeap bt f → leftAndRightAreMinHeap bt f := by
 intro hbt
 fun_induction isMinHeap; all_goals (grind [leftAndRightAreMinHeap, isMinHeap])
@@ -92,7 +107,6 @@ fun_induction isMinHeap; all_goals (grind [leftAndRightAreMinHeap, isMinHeap])
 lemma minHeapThenRootIsMinOfChildren (bt: BinaryTree α) (f: α → ENat): isMinHeap bt f → rootIsMinOfChildren bt f := by
 intro hbt
 fun_induction isMinHeap; all_goals (grind [rootIsMinOfChildren])
-
 
 lemma leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap (bt: BinaryTree α) (f: α → ENat): leftAndRightAreMinHeap bt f ∧ rootIsMinOfChildren bt f → isMinHeap bt f := by
 intro hbt
@@ -102,7 +116,6 @@ lemma leftAndRightAreMinHeapLeft (l: BinaryTree α) (r: BinaryTree α) (v: α) (
 intro hbt
 simp [leftAndRightAreMinHeap] at hbt
 simp [minHeapThenLeftAndRightAreMinHeap, hbt]
-
 
 lemma leftAndRightAreMinHeapRight (l: BinaryTree α) (r: BinaryTree α) (v: α) (f: α → ENat): leftAndRightAreMinHeap (node l v r) f → leftAndRightAreMinHeap r f := by
 intro hbt
@@ -199,6 +212,33 @@ fun_induction contains
       grw [← hh, ← hhl]
       exact h2
 
+lemma minHeapContainsLeRoot (bt l r: BinaryTree α) (v v': α) (f: α → ENat): isMinHeap bt f → bt = node l v r → contains bt v' → f v ≤ f v' := by
+intro hmin hbt hv'
+fun_induction contains generalizing l v r
+. contradiction
+. expose_names
+  cases hv'; all_goals expose_names
+  . simp_all
+  . cases h; all_goals expose_names
+    . obtain ⟨ ll, lv, lr, hl ⟩ := containsIsNode l_1 v' h
+      have: f lv ≤ f v' := by
+        apply ih2 ll lr lv _ hl h
+        apply minHeapThenLeftAndRightAreMinHeap at hmin
+        rw [leftAndRightAreMinHeap] at hmin
+        obtain ⟨ hl', hr' ⟩ := hmin
+        exact hl'
+      grw [←this]
+      apply rootIsMinOfChildrenLeft l r ll lr v lv f (by grind [minHeapThenRootIsMinOfChildren]) (by grind)
+    . obtain ⟨ rl, rv, rr, hr ⟩ := containsIsNode r_1 v' h
+      have: f rv ≤ f v' := by
+        apply ih1 rl rr rv _ hr h
+        apply minHeapThenLeftAndRightAreMinHeap at hmin
+        rw [leftAndRightAreMinHeap] at hmin
+        obtain ⟨ hl', hr' ⟩ := hmin
+        exact hr'
+      grw [←this]
+      apply rootIsMinOfChildrenRight l r rl rr v rv f (by grind [minHeapThenRootIsMinOfChildren]) (by grind)
+
 lemma heapifyPreservesMinHeap (bt: BinaryTree α) (f: α → ENat): isMinHeap bt f → bt = heapify bt f:= by
 fun_induction heapify; all_goals expose_names; all_goals try grind
 
@@ -222,6 +262,16 @@ grind [contains]
 
 lemma containsLeftThenContainsRoot (tree l r: BinaryTree α) (v v':  α): tree = node l v r → contains l v' → contains tree v' := by
 grind [contains]
+
+lemma minHeapThenMembersLeftLe (bt l r: BinaryTree α) (v v': α) (f: α → ENat): isMinHeap bt f → bt = node l v r → contains l v' → f v ≤ f v' := by
+intro hmin hbt hl
+apply containsLeftThenContainsRoot bt l r v v' hbt at hl
+apply minHeapContainsLeRoot bt l r v v' f hmin hbt hl
+
+lemma minHeapThenMembersRightLe (bt l r: BinaryTree α) (v v': α) (f: α → ENat): isMinHeap bt f → bt = node l v r → contains r v' → f v ≤ f v' := by
+intro hmin hbt hl
+apply containsRightThenContainsRoot bt l r v v' hbt at hl
+apply minHeapContainsLeRoot bt l r v v' f hmin hbt hl
 
 lemma heapifyEstablishesMinHeap' {α} (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r ∧  isMinHeap l f ∧ isMinHeap r f → isMinHeap (heapify bt f) f := by
 fun_induction heapify generalizing l r v; all_goals expose_names
@@ -559,67 +609,369 @@ lemma extractMinIsSome {α : Type u} [DecidableEq α] (bt : BinaryTree α) (f : 
 have: ∃ v, some v = (getLast bt).1 := by apply getLastReturnsSome bt hbt
 grind
 
-def getParent [DecidableEq α]: BinaryTree α → α → Option (BinaryTree α)
-| leaf, _ => none
-| node l v r, v' => match l, r with
-    | leaf, leaf => none
-    | leaf, node _ rv _ => if rv = v' then (node l v r) else getParent r v'
-    | node _ lv _, leaf => if lv = v' then (node l v r) else getParent l v'
-    | node _ lv _, node _ rv _ =>   if  rv = v' ∨  lv = v'
-                                          then (node l v r)
-                                        else let b := getParent l v
-                                          match b with
-                                          | some _ => b
-                                          | none => getParent r v
+lemma insertIsNode (bt: BinaryTree α) (f: α → ENat) (v: α): ∃ l r v', insert bt v f = node l v' r := by
+fun_induction insert
+. grind
+. grind
+. grind
 
-def emin (m: ENat) (n: ENat): ENat := if m ≤  n then m else n
+lemma insertThenContains (bt: BinaryTree α) (v: α) (f: α → ENat): contains (insert bt v f) v := by
+fun_induction insert; all_goals grind
 
-def dist_to_root [DecidableEq α]: (BinaryTree α) → α → ENat
-| leaf, _ => ⊤
-| node l v r, v' => if v' = v then 0 else 1 + (emin (dist_to_root l v') (dist_to_root r v'))
+lemma insertContainsnOldMemberOrNewValue (bt: BinaryTree α) (v v': α) (f: α → ENat): contains (insert bt v f) v' → contains bt v' ∨ v = v' := by
+intro hbt
+fun_induction insert; all_goals grind
 
-def card: BinaryTree α → ENat
-| leaf => 0
-| node l _ r => 1 + card l + card r
+lemma insertPreservesMinHeap (bt: BinaryTree α) (v: α) (f: α → ENat): isMinHeap bt f → isMinHeap (insert bt v f) f := by
+intro hbt
+have hbtp := hbt
+fun_induction insert
+. grind
+. expose_names
+  apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
+  apply minHeapThenLeftAndRightAreMinHeap at hbt
+  simp [leftAndRightAreMinHeap] at hbt
+  constructor
+  . simp [leftAndRightAreMinHeap]
+    constructor
+    . apply ih1
+      grind
+      obtain ⟨hl, hr⟩ := hbt
+      exact hl
+    . simp [hbt]
+  . cases r
+    . obtain ⟨l', r', v', h' ⟩ := insertIsNode l f v_1
+      rw [h']
+      simp [rootIsMinOfChildren]
+      have: contains l v' ∨ v_1 = v' := by
+        apply insertContainsnOldMemberOrNewValue l v_1 v' f
+        rw [h']
+        grind
+      cases this
+      . expose_names
+        obtain ⟨hl, hr⟩ := hbt
+        grw [h]
+        apply minHeapThenMembersLeftLe (l.node v_1 leaf) l leaf v_1 v' f hbtp (rfl) h_1
+      . expose_names
+        rw [←h_1]
+        exact h
+    . expose_names
+      obtain ⟨l', r', v', h' ⟩ := insertIsNode l f v_1
+      rw [h']
+      simp [rootIsMinOfChildren]
+      constructor
+      . have: contains l v' ∨ v_1 = v' := by
+          apply insertContainsnOldMemberOrNewValue l v_1 v' f
+          rw [h']
+          grind
+        cases this
+        . expose_names
+          obtain ⟨hl, hr⟩ := hbt
+          grw [h]
+          apply minHeapThenMembersLeftLe (l.node v_1 (a.node a_1 a_2)) l (a.node a_1 a_2) v_1 v' f hbtp (rfl) h_1
+        . expose_names
+          rw [←h_1]
+          exact h
+      . grw [h]
+        apply minHeapThenMembersRightLe (l.node v_1 (a.node a_1 a_2)) l (a.node a_1 a_2) v_1 a_1 f hbtp (rfl) (by grind)
+. expose_names
+  apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
+  apply minHeapThenLeftAndRightAreMinHeap at hbt
+  simp [leftAndRightAreMinHeap] at hbt
+  constructor
+  . simp [leftAndRightAreMinHeap]
+    constructor
+    . apply ih1
+      grind
+      obtain ⟨hl, hr⟩ := hbt
+      exact hl
+    . simp [hbt]
+  . cases r
+    . obtain ⟨l', r', v', h' ⟩ := insertIsNode l f v
+      rw [h']
+      simp [rootIsMinOfChildren]
+      have: contains l v' ∨ v = v' := by
+        apply insertContainsnOldMemberOrNewValue l v v' f
+        rw [h']
+        grind
+      cases this
+      . expose_names
+        obtain ⟨hl, hr⟩ := hbt
+        apply minHeapThenMembersLeftLe (l.node v_1 leaf) l leaf v_1 v' f  hbtp (rfl) h_1
+      . expose_names
+        rw [←h_1]
+        simp at h
+        grw [h]
+    . expose_names
+      obtain ⟨l', r', v', h' ⟩ := insertIsNode l f v
+      rw [h']
+      simp [rootIsMinOfChildren]
+      constructor
+      . have: contains l v' ∨ v = v' := by
+          apply insertContainsnOldMemberOrNewValue l v v' f
+          rw [h']
+          grind
+        cases this
+        . expose_names
+          obtain ⟨hl, hr⟩ := hbt
+          apply minHeapThenMembersLeftLe (l.node v_1 (a.node a_1 a_2)) l (a.node a_1 a_2) v_1 v' f hbtp (rfl) h_1
+        . expose_names
+          rw [←h_1]
+          simp at h
+          grw [h]
+      . apply minHeapThenMembersRightLe (l.node v_1 (a.node a_1 a_2)) l (a.node a_1 a_2) v_1 a_1 f hbtp (rfl) (by grind)
 
+lemma insertPreservesExistingMembers (bt: BinaryTree α) (v v': α) (f: α → ENat): contains bt v →  contains (insert bt v' f) v := by
+intro hbt
+fun_induction insert; all_goals expose_names
+. contradiction
+. simp [contains] at hbt
+  cases hbt
+  . expose_names
+    simp [contains]
+    right
+    left
+    rw [h_1]
+    grind [insertThenContains]
+  . expose_names
+    cases h_1; all_goals expose_names
+    . simp [contains]
+      right
+      left
+      apply ih1
+      exact h_1
+    . simp [contains]
+      right
+      right
+      exact h_1
+. simp [contains] at hbt
+  cases hbt
+  . expose_names
+    simp [contains]
+    left
+    rw [h_1]
+  . expose_names
+    cases h_1; all_goals expose_names
+    . simp [contains]
+      right
+      left
+      apply ih1
+      exact h_1
+    . simp [contains]
+      right
+      right
+      exact h_1
 
-def siftUp [DecidableEq α] (bt: BinaryTree α) (f: α → ENat) (v': α): (BinaryTree α) := match bt with
-| leaf => leaf
-| node l v r => if v' = v then bt else match l, r with
-    | leaf, leaf => leaf
-    | leaf, node rl rv rr => if rv = v' then if f rv < f v then  (node l rv (node rl v rr)) else bt else siftUp r f v'
-    | node ll lv lr, leaf => if lv = v' then if f lv < f v then  (node (node ll v lr) lv r) else bt else siftUp l f v'
-    | node ll lv lr, node rl rv rr => if lv = v' then if f v' < f v then  (node (node ll v lr) lv r)
-                                      else if rv = v' then if f v' < f v then  (node l rv (node rl v rr))
-                                      else bt
-                                      else bt
-                                      else bt
+def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
+  match bt1, bt2 with
+  | leaf, t => t
+  | t, leaf => t
+  | node l1 v1 r1, node l2 v2 r2 =>
+      if f v1 ≤ f v2 then
+        node (merge l1 (node l2 v2 r2) f) v1 r1
+      else
+        node (merge (node l1 v1 r1) l2 f) v2 r2
 
+def remove (bt : BinaryTree α) (x : α) (f : α → ENat)
+  [DecidableEq α] : BinaryTree α :=
+  match bt with
+  | leaf => leaf
+  | node l v r =>
+      if x = v then
+        merge l r f
+      else
+        node (remove l x f) v (remove r x f)
 
-def decreasePriority [DecidableEq α] (bt: BinaryTree α)  (v': α) (f: α → ENat): (BinaryTree α) := sorry
--- match bt with
--- | leaf => leaf
--- | node l v r => if v = v' then siftUp bt v
---                     else let n := decreasePriority l v'
---                       match n with
---                       | none => decreasePriority r v'
---                       | some _ => n
+def decreasePriority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
+  insert (remove bt v f) v f
 
+lemma mergeLeftIdNodeIsNode (bt1 bt2 l1 r1: BinaryTree α) (f: α → ENat) (v1: α): bt1 = node l1 v1 r1 → ∃ l v r, merge bt1 bt2 f = node l v r := by
+fun_induction merge
+. grind
+. grind
+. grind
+. grind
 
--- def decreasePriority [DecidableEq α] (bt: BinaryTree α) (f: α → ENat) (v': α):  (BinaryTree α) :=
--- let
+lemma mergeRightIdNodeIsNode (bt1 bt2 l2 r2: BinaryTree α) (f: α → ENat) (v2: α): bt2 = node l2 v2 r2 → ∃ l v r, merge bt1 bt2 f = node l v r := by
+fun_induction merge
+. grind
+. grind
+. grind
+. grind
 
+lemma mergeLeftContains (bt1 l1 r1 bt2 l r: BinaryTree α) (v1 v: α ) (f: α → ENat): (merge bt1 bt2 f) = node l v r → isMinHeap bt1 f → isMinHeap bt2 f →  bt1 = node l1 v1 r1 → contains bt2 v ∨ v = v1 := by
+intro h
+fun_induction merge generalizing l1 r1 v1
+. grind
+. intros
+  expose_names
+  right
+  simp_all
+. expose_names
+  simp_all
+. expose_names
+  grind
 
--- lemma decreasePriorityPreservesMembers [DecidableEq α] (bt: BinaryTree α) (v v': α) (f: α → ENat): contains bt v → contains (decreasePriority bt f v') v := by
+lemma mergeRightContains (bt1 l2 r2 bt2 l r: BinaryTree α) (v2 v: α ) (f: α → ENat): (merge bt1 bt2 f) = node l v r → isMinHeap bt1 f → isMinHeap bt2 f →  bt2 = node l2 v2 r2 → contains bt1 v ∨ v = v2 := by
+intro h
+fun_induction merge generalizing l2 r2 v2
+. grind
+. intros
+  expose_names
+  right
+  simp_all
+. expose_names
+  grind
+. expose_names
+  grind
 
+lemma mergePreservesMinHeap (bt1 bt2 : BinaryTree α) (f : α → ENat) (h1 : isMinHeap bt1 f) (h2 : isMinHeap bt2 f) : isMinHeap (merge bt1 bt2 f) f := by
+fun_induction merge
+. grind
+. grind
+. expose_names
+  apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
+  constructor
+  . constructor
+    . apply ih1
+      apply minHeapThenLeftAndRightAreMinHeap at h1
+      simp [leftAndRightAreMinHeap] at h1
+      obtain ⟨ hl, hr ⟩ := h1
+      exact hl
+      exact h2
+    . apply minHeapThenLeftAndRightAreMinHeap at h1
+      simp [leftAndRightAreMinHeap] at h1
+      obtain ⟨ hl, hr ⟩ := h1
+      exact hr
+  . obtain ⟨ l, v, r, hr ⟩ := mergeRightIdNodeIsNode l1 (l2.node v2 r2) l2 r2 f v2 (rfl)
+    rw [hr]
+    cases r1
+    . simp[rootIsMinOfChildren]
+      have: contains l1 v ∨ v = v2 := by
+        apply mergeRightContains l1 l2 r2 (l2.node v2 r2) l r v2 v f hr _ h2 (rfl)
+        apply minHeapThenLeftAndRightAreMinHeap at h1
+        simp [leftAndRightAreMinHeap] at h1
+        simp [h1]
+      cases this
+      . apply minHeapThenMembersLeftLe (l1.node v1 leaf) l1 leaf v1 v f h1 (rfl) (by grind)
+      . expose_names
+        rw [h_1]
+        exact h
+    . simp[rootIsMinOfChildren]
+      have: contains l1 v ∨ v = v2 := by
+        apply mergeRightContains l1 l2 r2 (l2.node v2 r2) l r v2 v f hr _ h2 (rfl)
+        apply minHeapThenLeftAndRightAreMinHeap at h1
+        simp [leftAndRightAreMinHeap] at h1
+        simp [h1]
+      cases this
+      . expose_names
+        constructor
+        . apply minHeapThenMembersLeftLe (l1.node v1 (a.node a_1 a_2)) l1 (a.node a_1 a_2) v1 v f h1 (rfl) (by grind)
+        . apply minHeapThenMembersRightLe (l1.node v1 (a.node a_1 a_2)) l1 (a.node a_1 a_2) v1 a_1 f h1 (rfl) (by grind)
+      . expose_names
+        rw [h_1]
+        constructor
+        . exact h
+        . apply minHeapThenMembersRightLe (l1.node v1 (a.node a_1 a_2)) l1 (a.node a_1 a_2) v1 a_1 f h1 (rfl) (by grind)
+. expose_names
+  apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
+  constructor
+  . constructor
+    . apply ih1 h1
+      apply minHeapThenLeftAndRightAreMinHeap at h2
+      simp [leftAndRightAreMinHeap] at h2
+      obtain ⟨ hl, hr ⟩ := h2
+      exact hl
+    . apply minHeapThenLeftAndRightAreMinHeap at h2
+      simp [leftAndRightAreMinHeap] at h2
+      obtain ⟨ hl, hr ⟩ := h2
+      exact hr
+  . obtain ⟨ l, v, r, hl ⟩ := mergeLeftIdNodeIsNode (l1.node v1 r1) l2 l1 r1 f v1 (rfl)
+    rw [hl]
+    cases r2
+    . simp[rootIsMinOfChildren]
+      have: contains l2 v ∨ v = v1 := by
+        apply mergeLeftContains (l1.node v1 r1) l1 r1 l2 l r v1 v f hl h1 _ (rfl)
+        apply minHeapThenLeftAndRightAreMinHeap at h2
+        simp [leftAndRightAreMinHeap] at h2
+        simp [h2]
+      cases this
+      . apply minHeapThenMembersLeftLe (l2.node v2 leaf) l2 leaf v2 v f h2 (rfl) (by grind)
+      . expose_names
+        rw [h_1]
+        simp at h
+        grw [h]
+    . simp[rootIsMinOfChildren]
+      have: contains l2 v ∨ v = v1 := by
+        apply mergeLeftContains (l1.node v1 r1) l1 r1 l2 l r v1 v f hl h1 _ (rfl)
+        apply minHeapThenLeftAndRightAreMinHeap at h2
+        simp [leftAndRightAreMinHeap] at h2
+        simp [h2]
+      cases this
+      . expose_names
+        constructor
+        . apply minHeapThenMembersLeftLe (l2.node v2 (a.node a_1 a_2)) l2 (a.node a_1 a_2) v2 v f h2 (rfl) h_1
+        . apply minHeapThenMembersRightLe (l2.node v2 (a.node a_1 a_2)) l2 (a.node a_1 a_2) v2 a_1 f h2 (rfl) (by grind)
+      . expose_names
+        rw [h_1]
+        constructor
+        . simp at h
+          grw [h]
+        . apply minHeapThenMembersRightLe (l2.node v2 (a.node a_1 a_2)) l2 (a.node a_1 a_2) v2 a_1 f h2 (rfl) (by grind)
+
+lemma removeStructure [DecidableEq α] (bt l r: BinaryTree α): bt = node l v r →  remove bt x f = node l' v' r'  → f v ≤ f v' :=
+sorry
+
+lemma removePreservesMinHeap [DecidableEq α] (bt : BinaryTree α) (x : α) (f : α → ENat): isMinHeap bt f → isMinHeap (remove bt x f) f := by
+intro hmin
+fun_induction remove
+. exact hmin
+. expose_names
+  apply minHeapThenLeftAndRightAreMinHeap at hmin
+  grind [mergePreservesMinHeap]
+. expose_names
+  apply leftAndRightAreMinHeapAndRootIsMinOfChildrenToMinHeap
+  constructor
+  simp[leftAndRightAreMinHeap]
+  constructor
+  . apply ih2
+    apply minHeapThenLeftAndRightAreMinHeap at hmin
+    simp[leftAndRightAreMinHeap] at hmin
+    simp_all
+  . apply ih1
+    apply minHeapThenLeftAndRightAreMinHeap at hmin
+    simp[leftAndRightAreMinHeap] at hmin
+    simp_all
+  . cases hl : l.remove x f with
+    | leaf =>
+        cases hr : r.remove x f with
+        | leaf =>
+          simp[rootIsMinOfChildren]
+        | node l'' v'' r'' =>
+          simp[rootIsMinOfChildren]
+          sorry
+    | node l' v' r' =>
+        cases hr : r.remove x f with
+        | leaf =>
+          simp[rootIsMinOfChildren]
+          sorry
+        | node l'' v'' r'' =>
+          simp[rootIsMinOfChildren]
+          sorry
+
+theorem decreasePriorityPreservesMinHeap [DecidableEq α]  (bt: BinaryTree α) (v : α) (f : α → ENat): isMinHeap bt f → isMinHeap (decreasePriority bt v f) f := by
+intro hmin
+simp [decreasePriority]
+apply insertPreservesMinHeap
+apply removePreservesMinHeap
+exact hmin
 
 def size: (BinaryTree α) →  Nat
 | leaf => 0
 | node l _ r => 1 + size l + size r
+
 structure BinaryHeap (α : Type u) [DecidableEq α] where
   tree : BinaryTree α
-
-#check BinaryTree
 
 namespace BinaryHeap
 
