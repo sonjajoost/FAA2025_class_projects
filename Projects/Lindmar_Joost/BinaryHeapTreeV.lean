@@ -8,10 +8,7 @@ inductive BinaryTree (α : Type u)
   | leaf : BinaryTree α
   | node : BinaryTree α → α → BinaryTree α → BinaryTree α
 
-
 namespace BinaryTree
-
-
 
 @[grind] def isMinHeap : BinaryTree α → (dist : α → ENat) → Prop
 | leaf, _ => true
@@ -783,7 +780,7 @@ fun_induction insert; all_goals expose_names
         node (remove l x f) v (remove r x f)
 
 @[grind] def decreasePriority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
-  insert (remove bt v f) v f
+  if containsB bt v then insert (remove bt v f) v f else bt
 
 lemma mergeLeftIdNodeIsNode (bt1 bt2 l1 r1: BinaryTree α) (f: α → ENat) (v1: α): bt1 = node l1 v1 r1 → ∃ l v r, merge bt1 bt2 f = node l v r := by
 fun_induction merge
@@ -977,17 +974,135 @@ fun_induction remove
           . have: contains r v'' := by grind[removeNoNewMembers]
             apply minHeapThenMembersRightLe (l.node v r) l r v v'' f hmin (rfl) this
 
-
 theorem decreasePriorityPreservesMinHeap [DecidableEq α]  (bt: BinaryTree α) (v : α) (f : α → ENat): isMinHeap bt f → isMinHeap (decreasePriority bt v f) f := by
 intro hmin
 simp [decreasePriority]
-apply insertPreservesMinHeap
-apply removePreservesMinHeap
-exact hmin
+by_cases (bt.containsB v)
+. expose_names
+  simp [h]
+  apply insertPreservesMinHeap
+  apply removePreservesMinHeap
+  exact hmin
+. expose_names
+  simp [h]
+  exact hmin
 
 def size: (BinaryTree α) →  Nat
 | leaf => 0
 | node l _ r => 1 + size l + size r
+
+@[simp] lemma sizeGeZero: size bt ≥ 0 := by
+fun_induction size
+. simp
+. simp
+
+lemma mergeSize [DecidableEq α] (bt1 bt2: BinaryTree α) (f : α → ENat): size (merge bt1 bt2 f) = size bt1 + size bt2 := by
+fun_induction merge
+. simp[size]
+. simp [size]
+. grind [size]
+. grind [size]
+
+lemma removeSizeDec [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat) : size (remove bt v f) ≤ size bt := by
+fun_induction remove
+. simp
+. grind [size, mergeSize]
+. grind [size, mergeSize]
+
+lemma removeSize [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat) (h: contains bt v): size (remove bt v f) + 1 ≤ size bt:= by
+fun_induction remove
+. contradiction
+. expose_names
+  rw [mergeSize l r f]
+  nth_rw 3 [size.eq_def]
+  simp
+  grind
+. expose_names
+  simp [contains] at h
+  cases h
+  . grind
+  . expose_names
+    cases h
+    . expose_names
+      simp[size]
+      apply ih2 at h
+      grw [← h]
+      grind[removeSizeDec]
+    . expose_names
+      simp [size]
+      apply ih1 at h
+      grw [← h]
+      grind[removeSizeDec]
+
+lemma insertSize [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): size (insert bt v f) = size bt + 1 := by
+fun_induction insert
+. simp[size]
+. grind [size]
+. grind [size]
+
+lemma containsBSize [DecidableEq α] (bt:BinaryTree α): containsB bt v = true → bt.size ≥ 1 := by
+cases bt
+. intro
+  by_contra
+  grind
+. intro
+  simp[size]
+  omega
+
+lemma containsBContains [DecidableEq α] (bt: BinaryTree α): containsB bt v → contains bt v := by
+intro
+fun_induction contains
+. contradiction
+. grind
+
+lemma decreasePrioritySize [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): size (decreasePriority bt v f) ≤ size bt := by
+simp[decreasePriority]
+by_cases bt.containsB v
+. expose_names
+  simp [h]
+  rw [insertSize]
+  grw [removeSize]
+  grind [containsBContains]
+. expose_names
+  simp [h]
+
+lemma getLastSize (h: bt ≠ leaf): size (getLast bt).2 < size bt := by
+fun_induction getLast
+. contradiction
+. simp [size]
+. expose_names
+  simp [size]
+  apply ih1
+  grind
+. expose_names
+  simp [size]
+  apply ih1
+  grind
+
+lemma heapifySize: size (heapify bt f) = size bt := by
+fun_induction heapify; all_goals grind [size]
+
+lemma extractMinSize (h: bt ≠ leaf): size (extractMin bt f).2 < size bt := by
+induction bt
+. contradiction
+. expose_names
+  have hex: ∃ bt' v'', (some v'', bt') = getLast  (a.node a_1 a_2):= by
+    apply getLastNode (a.node a_1 a_2) a a_2 a_1 (rfl)
+  obtain ⟨bt, v, hv⟩ := hex
+  simp[extractMin]
+  rw[← hv]
+  simp
+  cases bt
+  . simp[size]
+  . expose_names
+    simp
+    simp[heapifySize]
+    have: (a_3.node v a_5).size = (a_3.node a_4 a_5).size := by simp [size]
+    rw [this]
+    have: (a_3.node a_4 a_5) = (a.node a_1 a_2).getLast.2 := by
+      rw [←hv]
+    rw [this]
+    apply getLastSize h
 
 structure BinaryHeap (α : Type u) [DecidableEq α] where
   tree : BinaryTree α
@@ -995,12 +1110,23 @@ structure BinaryHeap (α : Type u) [DecidableEq α] where
 namespace BinaryHeap
 
 def empty [DecidableEq α]: BinaryHeap α := { tree := BinaryTree.leaf }
+
 def isEmpty [DecidableEq α] (h: BinaryHeap α): Bool :=  match h.tree with
 | leaf => true
-| _ => false
+| node _ _ _ => false
 
 def add {α : Type u} [DecidableEq α] (h : BinaryHeap α) (v : α) (priority : α → ENat) : BinaryHeap α :=
   {tree:= (h.tree.insert v priority)}
+
+lemma notIsEmptyIsNotLeaf [DecidableEq α] (bh: BinaryHeap α): isEmpty bh = false → bh.tree ≠ leaf := by
+cases h: bh.tree
+. intro h
+  simp [isEmpty] at h
+  expose_names
+  simp [h_1] at h
+. intro h
+  expose_names
+  simp
 
 lemma extractMinIsSomeHeap {α : Type u} [DecidableEq α] (h : BinaryHeap α) (f : α → ENat) (hh: ¬ isEmpty h): (extractMin h.tree f).1.isSome := by
 grind[isEmpty, extractMinIsSome]
@@ -1017,15 +1143,19 @@ def decrease_priority [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α �
 theorem sizeOf_decrease_priority_le {α : Type u} [DecidableEq α] (h : BinaryHeap α) (v : α) (prio :α → ENat) :
   sizeOf (decrease_priority h v prio) ≤ sizeOf h := by
   -- To be proved from the concrete heap implementation
-  sorry
+  simp [decrease_priority, sizeOf]
+  grind[decreasePrioritySize]
 
 -- Helper lemma: extracting the minimum from a non-empty heap strictly decreases its size.
 theorem sizeOf_extract_min_lt_of_isEmpty_eq_false
     {V : Type*} [Nonempty V] [DecidableEq V] (h : BinaryHeap V) (hNE : isEmpty h = false) (priority: V → ENat):
     sizeOf (Prod.snd (extract_min h priority (by grind))) < sizeOf h := by
   -- To be proved from the concrete heap implementation
-  sorry
-
+  simp [sizeOf]
+  simp  [extract_min]
+  apply extractMinSize
+  apply notIsEmptyIsNotLeaf at hNE
+  exact hNE
 
 -- minimimla heap-distance consistency lemma
 lemma key_at_y_le_extracted_min [Nonempty V] [DecidableEq V]
@@ -1036,10 +1166,45 @@ lemma key_at_y_le_extracted_min [Nonempty V] [DecidableEq V]
   -- smaller than the finalized key `y`.
   admit
 
+lemma decreasePriorityPreservesLeaf [DecidableEq α] (bt: BinaryTree α) (v: α) (f: α → ENat): bt = leaf → decreasePriority bt v f = leaf := by
+simp[decreasePriority]
+intro
+by_contra
+grind
+
+lemma decreasePriorityPreservesNode [DecidableEq α] (bt l r: BinaryTree α) (v v': α) (f: α → ENat): bt = node l v' r→  ∃ l' r' v'', decreasePriority bt v f = node l' v'' r' := by
+intro hbt
+simp [decreasePriority]
+by_cases bt.containsB v
+. expose_names
+  rw[h]
+  simp_all
+  apply insertIsNode ((l.node v' r).remove v f) f v
+. expose_names
+  simp[h]
+  use l
+  use r
+  use v'
 
 lemma decrease_priority_preserves_isEmpty [DecidableEq V] (q : BinaryHeap V) (v : V) (d' : V → ENat) :
     (q.decrease_priority v d').isEmpty = q.isEmpty := by
     -- decrease_priority should not change whether the heap is empty
-    sorry
+    by_cases q.isEmpty
+    . expose_names
+      rw [h]
+      simp [isEmpty] at h
+      have: q.tree = leaf := by grind
+      simp [decrease_priority, isEmpty]
+      apply decreasePriorityPreservesLeaf (q.tree) v d' at this
+      rw[this]
+    . expose_names
+      simp [isEmpty] at h
+      have: ∃ l v' r, q.tree = node l v' r := by grind
+      obtain ⟨l, v', r, h⟩ := this
+      obtain ⟨ l', v'', r', h'⟩ := decreasePriorityPreservesNode q.tree l r v v' d' h
+      simp [decrease_priority]
+      rw [h']
+      simp[isEmpty]
+      rw[h]
 
 end BinaryHeap
