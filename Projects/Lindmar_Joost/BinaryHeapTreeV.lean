@@ -717,7 +717,7 @@ fun_induction insert
           grw [h]
       . apply min_heap_then_members_right_le (l.node v_1 (a.node a_1 a_2)) l (a.node a_1 a_2) v_1 a_1 f hbtp (rfl) (by grind)
 
-lemma insert_preserves_existing_members (bt: BinaryTree α) (v v': α) (f: α → ENat): contains bt v →  contains (insert bt v' f) v := by
+lemma contains_then_insert_contains (bt: BinaryTree α) (v v': α) (f: α → ENat): contains bt v →  contains (insert bt v' f) v := by
 intro hbt
 fun_induction insert; all_goals expose_names
 . contradiction
@@ -757,6 +757,42 @@ fun_induction insert; all_goals expose_names
       right
       right
       exact h_1
+
+lemma insert_contains (bt: BinaryTree α) (v: α) (f: α → ENat): contains (insert bt v f) v := by
+fun_induction insert
+. simp[contains]
+. simp[contains]
+. grind
+
+lemma insert_contains_then_contains_or_inserted (bt: BinaryTree α) (v v': α) (f: α → ENat): contains (insert bt v' f) v → v = v' ∨ contains bt v := by
+intro h
+fun_induction insert generalizing v
+. expose_names
+  left
+  grind
+. expose_names
+  simp [contains] at h
+  cases h
+  . simp_all
+  . expose_names
+    right
+    simp[contains]
+    cases h; all_goals expose_names
+    . specialize ih1 v h
+      grind
+    . grind
+. expose_names
+  simp [contains] at h
+  cases h
+  . expose_names
+    right
+    simp[contains]
+    left
+    exact h
+  . grind
+
+lemma insert_correctness (bt: BinaryTree α) (f: α → ENat): (∀ v v', contains bt v ∨ v = v' ↔  contains (insert bt v' f) v ) ∧ (is_min_heap bt f → is_min_heap (insert bt v f) f) := by
+grind[contains_then_insert_contains, insert_contains, insert_contains_then_contains_or_inserted, insert_preserves_min_heap]
 
 @[grind] def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
   match bt1, bt2 with
