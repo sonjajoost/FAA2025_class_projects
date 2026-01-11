@@ -95,6 +95,29 @@ match lastNode with
       else
         node (insert l v f) x r
 
+@[grind] def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
+  match bt1, bt2 with
+  | leaf, t => t
+  | t, leaf => t
+  | node l1 v1 r1, node l2 v2 r2 =>
+      if f v1 ≤ f v2 then
+        node (merge l1 (node l2 v2 r2) f) v1 r1
+      else
+        node (merge (node l1 v1 r1) l2 f) v2 r2
+
+@[grind] def remove (bt : BinaryTree α) (x : α) (f : α → ENat)
+  [DecidableEq α] : BinaryTree α :=
+  match bt with
+  | leaf => leaf
+  | node l v r =>
+      if x = v then
+        merge l r f
+      else
+        node (remove l x f) v (remove r x f)
+
+@[grind] def decrease_priority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
+  if containsb bt v then insert (remove bt v f) v f else bt
+
 lemma min_heap_then_left_and_right_are_min_heap (bt: BinaryTree α) (f: α → ENat): is_min_heap bt f → left_and_right_are_min_heap bt f := by
 intro hbt
 fun_induction is_min_heap; all_goals (grind [left_and_right_are_min_heap, is_min_heap])
@@ -139,6 +162,12 @@ fun_induction heapify generalizing v; all_goals try grind[contains]
 
 lemma contains_is_node (bt: BinaryTree α) (v: α): contains bt v → ∃ l v' r, bt = node l v' r := by
 fun_induction contains; all_goals simp
+
+lemma contains_not_root_then_children (bt l r: BinaryTree α) (v v': α): contains bt v' → bt = node l v r →  v' ≠ v → contains l v' ∨ contains r v' := by
+intro hbtc hbt hv
+fun_induction bt.contains v'
+. contradiction
+. grind
 
 lemma min_heap_root_min (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = (node l v r) → is_min_heap bt f → f v = heap_min bt f := by
 intro hbt hmin
@@ -791,31 +820,8 @@ fun_induction insert generalizing v
     exact h
   . grind
 
-lemma insert_correctness (bt: BinaryTree α) (f: α → ENat): (∀ v v', contains bt v ∨ v = v' ↔  contains (insert bt v' f) v ) ∧ (is_min_heap bt f → is_min_heap (insert bt v f) f) := by
+theorem insert_correctness (bt: BinaryTree α) (f: α → ENat): (∀ v v', contains bt v ∨ v = v' ↔  contains (insert bt v' f) v ) ∧ (is_min_heap bt f → is_min_heap (insert bt v f) f) := by
 grind[contains_then_insert_contains, insert_contains, insert_contains_then_contains_or_inserted, insert_preserves_min_heap]
-
-@[grind] def merge (bt1 bt2 : BinaryTree α) (f : α → ENat) : BinaryTree α :=
-  match bt1, bt2 with
-  | leaf, t => t
-  | t, leaf => t
-  | node l1 v1 r1, node l2 v2 r2 =>
-      if f v1 ≤ f v2 then
-        node (merge l1 (node l2 v2 r2) f) v1 r1
-      else
-        node (merge (node l1 v1 r1) l2 f) v2 r2
-
-@[grind] def remove (bt : BinaryTree α) (x : α) (f : α → ENat)
-  [DecidableEq α] : BinaryTree α :=
-  match bt with
-  | leaf => leaf
-  | node l v r =>
-      if x = v then
-        merge l r f
-      else
-        node (remove l x f) v (remove r x f)
-
-@[grind] def decrease_priority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
-  if containsb bt v then insert (remove bt v f) v f else bt
 
 lemma merge_left_is_node_is_node (bt1 bt2 l1 r1: BinaryTree α) (f: α → ENat) (v1: α): bt1 = node l1 v1 r1 → ∃ l v r, merge bt1 bt2 f = node l v r := by
 fun_induction merge
@@ -958,6 +964,12 @@ fun_induction merge
 . grind
 . grind
 
+lemma merge_contains_then_inputs_contain  (bt1 bt2 : BinaryTree α) (f : α → ENat): contains (merge bt1 bt2 f) v → contains bt1 v ∨ contains bt2 v := by
+fun_induction merge; all_goals grind
+
+lemma contains_then_merge_contains (bt1 bt2 : BinaryTree α) (f : α → ENat): contains bt1 v ∨ contains bt2 v → contains (merge bt1 bt2 f) v  := by
+fun_induction merge; all_goals grind
+
 lemma remove_no_new_members [DecidableEq α] (bt l r : BinaryTree α) (x v: α) (f: α → ENat): bt.remove x f = node l v r → contains bt v:= by
 fun_induction remove
 . grind
@@ -1009,6 +1021,19 @@ fun_induction remove
           . have: contains r v'' := by grind[remove_no_new_members]
             apply min_heap_then_members_right_le (l.node v r) l r v v'' f hmin (rfl) this
 
+lemma remove_preserves_members_except_v [DecidableEq α] (bt : BinaryTree α) (x v: α) (f: α → ENat): contains bt v → v ≠ x → contains (bt.remove x f) v := by
+fun_induction remove
+. grind
+. expose_names
+  intro h1 h2
+  apply contains_not_root_then_children (l.node x r) l r x v h1 (rfl) at h2
+  grind[contains_then_merge_contains]
+. expose_names
+  intro h1 h2
+  cases h1
+  . grind
+  . grind
+
 theorem decrease_priority_preserves_min_heap [DecidableEq α]  (bt: BinaryTree α) (v : α) (f : α → ENat): is_min_heap bt f → is_min_heap (decrease_priority bt v f) f := by
 intro hmin
 simp [decrease_priority]
@@ -1021,6 +1046,29 @@ by_cases (bt.containsb v)
 . expose_names
   simp [h]
   exact hmin
+
+lemma decrease_priority_preserves_members [DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v → contains (decrease_priority bt v' f) v := by
+simp[decrease_priority]
+by_cases v = v'
+. intro
+  cases bt.containsb v'
+  . simp
+    (expose_names; exact h_1)
+  . simp
+    expose_names
+    rw [h]
+    grind[insert_contains]
+. intro
+  cases bt.containsb v'
+  . simp
+    (expose_names; exact h_1)
+  . simp
+    expose_names
+    apply contains_then_insert_contains
+    grind[remove_preserves_members_except_v]
+
+lemma decrease_correctness[DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v → contains (decrease_priority bt v' f) v  ∧  is_min_heap bt f → is_min_heap (decrease_priority bt v f) f := by
+grind[decrease_priority_preserves_members, decrease_priority_preserves_min_heap]
 
 def size: (BinaryTree α) →  Nat
 | leaf => 0
