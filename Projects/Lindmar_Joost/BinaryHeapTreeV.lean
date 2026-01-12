@@ -560,7 +560,7 @@ fun_induction get_last generalizing l r v; all_goals (expose_names; try grind)
       . simp [get_last]
         grind
 
-lemma extract_min_preserves_members_except_root (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r  → is_min_heap bt f → contains bt v' → v ≠  v' → contains (extract_min bt f).2 v' := by
+lemma contains_then_extract_min_contains_except_root (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r → is_min_heap bt f → contains bt v' → v ≠  v' → contains (extract_min bt f).2 v' := by
   intros; expose_names
 
   have hex: ∃ bt' v'', (some v'', bt') = get_last bt := by
@@ -601,6 +601,63 @@ lemma extract_min_preserves_members_except_root (bt l r: BinaryTree α) (v: α) 
         apply get_last_preserves_members_except_last (node l v r) l r v v' (rfl) (_) hgl
         grind
 
+lemma get_last_last_contains: bt.get_last.1 = some v → contains bt v := by
+fun_induction get_last; all_goals grind
+
+lemma get_last_contains_then_contains (bt: BinaryTree α) (v: α): contains (get_last bt).2 v → contains bt v := by
+fun_induction get_last; all_goals grind
+
+lemma extract_min_contains_then_contains (bt: BinaryTree α) (v: α) (f: α → ENat): contains (extract_min bt f).2 v → contains bt v := by
+simp[extract_min]
+fun_cases get_last
+. simp
+. simp_all
+  intro
+  contradiction
+. expose_names
+  simp_all
+  cases val
+  . simp
+    intro
+    contradiction
+  . intro
+    expose_names
+    simp [contains]
+    expose_names
+    simp at h_2
+    apply heapify_contains_then_contains at h_2
+    simp[contains] at h_2
+    cases h_2
+    . expose_names
+      right
+      have: r.get_last.1 = some val := by grind
+      apply get_last_last_contains at this
+      rw [← h_2]
+      exact this
+    . grind[get_last_contains_then_contains]
+. expose_names
+  simp_all
+  cases val
+  . simp
+    intro
+    contradiction
+  . intro
+    expose_names
+    simp [contains]
+    expose_names
+    simp at h_2
+    apply heapify_contains_then_contains at h_2
+    simp[contains] at h_2
+    cases h_2
+    . expose_names
+      right
+      left
+      have: l.get_last.1 = some val := by grind
+      apply get_last_last_contains at this
+      rw [← h_2]
+      exact this
+    . grind[get_last_contains_then_contains]
+
 lemma extract_min_correct_node (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r  → is_min_heap bt f → ∃ bt' v', extract_min bt f = (some v', bt') ∧ is_min_heap bt' f ∧ f v = heap_min bt f := by
   intros; expose_names
   have hex: ∃ bt' v'', (some v'', bt') = get_last bt := by
@@ -622,6 +679,9 @@ lemma extract_min_correct_node (bt l r: BinaryTree α) (v: α) (f: α → ENat):
         apply min_heap_then_left_and_right_are_min_heap at this
         grind [left_and_right_are_min_heap, heapify_establishes_min_heap']
       . grind [min_heap_root_min]
+
+lemma extrac_min_correctness (bt bt' l  r: BinaryTree α) (v v': α) (f: α → ENat): contains (extract_min bt f).2 v → contains bt v ∧ (is_min_heap bt f) → ((extract_min bt f = (some v', bt') → is_min_heap bt' f ∧ f v' = heap_min bt f) ∧ bt = node l v r → ((∃ v'' bt'', extract_min bt f = (some v'', bt'')) ∧  contains bt v''' → v ≠  v''' → contains (extract_min bt f).2 v''')):= by
+grind[extract_min_correct_node, extract_min_contains_then_contains, contains_then_extract_min_contains_except_root]
 
 lemma get_last_returns_some {α : Type u} [DecidableEq α] (bt : BinaryTree α) (hbt: bt ≠ leaf): ∃ v, some v = (get_last bt).1 := by
 fun_induction get_last; all_goals grind
