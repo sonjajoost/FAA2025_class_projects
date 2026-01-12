@@ -118,6 +118,10 @@ match lastNode with
 @[grind] def decrease_priority [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): BinaryTree α :=
   if containsb bt v then insert (remove bt v f) v f else bt
 
+def is_empty_tree [DecidableEq α] (bt: BinaryTree α): Bool :=  match bt with
+| leaf => true
+| node _ _ _ => false
+
 lemma min_heap_then_left_and_right_are_min_heap (bt: BinaryTree α) (f: α → ENat): is_min_heap bt f → left_and_right_are_min_heap bt f := by
 intro hbt
 fun_induction is_min_heap; all_goals (grind [left_and_right_are_min_heap, is_min_heap])
@@ -680,8 +684,29 @@ lemma extract_min_correct_node (bt l r: BinaryTree α) (v: α) (f: α → ENat):
         grind [left_and_right_are_min_heap, heapify_establishes_min_heap']
       . grind [min_heap_root_min]
 
-lemma extrac_min_correctness (bt bt' l  r: BinaryTree α) (v v': α) (f: α → ENat): contains (extract_min bt f).2 v → contains bt v ∧ (is_min_heap bt f) → ((extract_min bt f = (some v', bt') → is_min_heap bt' f ∧ f v' = heap_min bt f) ∧ bt = node l v r → ((∃ v'' bt'', extract_min bt f = (some v'', bt'')) ∧  contains bt v''' → v ≠  v''' → contains (extract_min bt f).2 v''')):= by
+lemma extract_min_correctness (bt bt' l  r: BinaryTree α) (v v': α) (f: α → ENat): contains (extract_min bt f).2 v → contains bt v ∧ (is_min_heap bt f) → ((extract_min bt f = (some v', bt') → is_min_heap bt' f ∧ f v' = heap_min bt f) ∧ bt = node l v r → ((∃ v'' bt'', extract_min bt f = (some v'', bt'')) ∧  contains bt v''' → v ≠  v''' → contains (extract_min bt f).2 v''')):= by
 grind[extract_min_correct_node, extract_min_contains_then_contains, contains_then_extract_min_contains_except_root]
+
+lemma extract_min_is_min: is_min_heap bt f → contains bt v → (extract_min bt f).1 = some y → f y ≤ f v := by
+intro h1 h2 h3
+simp[extract_min] at h3
+fun_cases get_last
+. simp_all[get_last]
+. grind
+. simp_all[get_last]
+  expose_names
+  cases val
+  . simp_all
+  . simp_all
+    rw[← h3]
+    grind[min_heap_contains_le_root]
+. simp_all[get_last]
+  expose_names
+  cases val
+  . simp_all
+  . simp_all
+    rw[← h3]
+    grind[min_heap_contains_le_root]
 
 lemma get_last_returns_some {α : Type u} [DecidableEq α] (bt : BinaryTree α) (hbt: bt ≠ leaf): ∃ v, some v = (get_last bt).1 := by
 fun_induction get_last; all_goals grind
@@ -693,6 +718,16 @@ grind
 lemma extract_min_is_some {α : Type u} [DecidableEq α] (bt : BinaryTree α) (f : α → ENat) (hbt: bt ≠ leaf):(extract_min bt f).1.isSome := by
 have: ∃ v, some v = (get_last bt).1 := by apply get_last_returns_some bt hbt
 grind
+
+lemma extract_min_returns_then_contains: (extract_min bt f).1 = some v → contains bt v := by
+expose_names
+simp[extract_min]
+fun_cases get_last
+. simp
+. grind
+. grind
+. grind
+
 
 lemma insert_is_node (bt: BinaryTree α) (f: α → ENat) (v: α): ∃ l r v', insert bt v f = node l v' r := by
 fun_induction insert
@@ -1247,16 +1282,25 @@ induction bt
     rw [this]
     apply get_last_size h
 
+
+def subTree (sub sup: BinaryTree α):= ∀ v, contains sub v → contains sup v
+
+
+lemma key_at_y_le_extracted_min_sub_tree [DecidableEq α] (y: α) (sub sup: BinaryTree α)
+ (f: α → ENat) (hsup: (extract_min sup f).1 = y) (hnesub: ¬ is_empty_tree sub) (hsubtree: subTree sub sup) (hmin: is_min_heap sup f):
+ ∀ u, (BinaryTree.extract_min sub f).1 = some u → f y ≤ f u := by
+intro u hu
+have: contains sub u := by grind[extract_min_returns_then_contains]
+have: contains sup u := by grind[subTree]
+have: contains sup y := by grind[extract_min_returns_then_contains]
+grind[extract_min_is_min]
+
 structure BinaryHeap (α : Type u) [DecidableEq α] where
   tree : BinaryTree α
 
 namespace BinaryHeap
 
 def empty [DecidableEq α]: BinaryHeap α := { tree := BinaryTree.leaf }
-
-def is_empty_tree [DecidableEq α] (bt: BinaryTree α): Bool :=  match bt with
-| leaf => true
-| node _ _ _ => false
 
 def isEmpty [DecidableEq α] (h: BinaryHeap α): Bool :=  match h.tree with
 | leaf => true
@@ -1278,7 +1322,7 @@ cases h: bh.tree
 lemma extract_min_is_someHeap {α : Type u} [DecidableEq α] (h : BinaryHeap α) (f : α → ENat) (hh: ¬ isEmpty h): (extract_min h.tree f).1.isSome := by
 grind[isEmpty, extract_min_is_some]
 
-noncomputable def extract_min {α : Type u} [Nonempty α] [DecidableEq α] (h : BinaryHeap α) (priority : α → ENat) (hh: ¬ isEmpty h): (α × BinaryHeap α) :=
+noncomputable def extract_min {α : Type u} [DecidableEq α] (h : BinaryHeap α) (priority : α → ENat) (hh: ¬ isEmpty h): (α × BinaryHeap α) :=
   ((h.tree.extract_min priority).1.get (by grind[extract_min_is_someHeap]) , {tree:= (h.tree.extract_min priority).2})
 
 def sizeOf {α : Type u} [DecidableEq α] (h : BinaryHeap α) : Nat := h.tree.size
@@ -1304,37 +1348,16 @@ theorem sizeOf_extract_min_lt_of_isEmpty_eq_false
   apply notIsEmptyIsNotLeaf at hNE
   exact hNE
 
+lemma key_at_y_le_extracted_min' [DecidableEq α]
+ (y: α) (p sup: (α → ENat) × BinaryHeap α) (f: α → ENat) (hnesub: isEmpty p.2 = false)
 
-def subTree (sub sup: BinaryTree α):= ∀ v, contains sub v → contains sup v
-
--- def subTreeGE (sub sup: BinaryTree α) (hmin: is_min_heap sup f) ():= ∀ v y, contains sub v → contains sup v → contains sup y → f y ≤ f v
-
-
--- lemma key_at_y_le_extracted_min_sub_tree [Nonempty α] [DecidableEq α] (y: α) (sub sup: BinaryTree α)
---  (f: α → ENat) (hsup: extract_min sup f = y) (hsub: ¬ (contains sub y)) (hnesub: ¬ is_empty_tree sub) (hsubtree: subTree sub sup) (hmin: is_min_heap sup f):
---  ∀ u, (BinaryTree.extract_min sub f).1 = some u → f y ≤ f u := by
--- simp[BinaryTree.extract_min]
--- have subp := sub
--- cases sub.get_last.1
--- . simp
--- . simp
---   cases sub.get_last.2
---   . simp_all
---     expose_names
---     have: contains sub val := by sorry
---     have: contains sup val := by
---       simp [subTree] at hsubtree
---       specialize hsubtree val this
---       exact hsubtree
---     grind
---   . simp
---     expose_names
---     have: contains sub a_1 := by sorry
---     have: contains sup a_1 := by
---       simp [subTree] at hsubtree
---       specialize hsubtree val this
---       exact hsubtree
-
+ (hNEsup : isEmpty sup.2 = false) (hsup: (sup.2.extract_min f (by simp[hNEsup])).1 = y)
+ (hsubtree: subTree p.2.tree sup.2.tree) (hmin: is_min_heap sup.2.tree f)
+ (hfprio: f = p.1):
+  ∀ u1, Prod.fst (p.2.extract_min f (by grind)) = u1 → p.1 y ≤ p.1 u1 := by
+  intro u1 h
+  rw[←hfprio]
+  apply BinaryTree.key_at_y_le_extracted_min_sub_tree y p.2.tree sup.2.tree f (by grind[extract_min]) (by simp[isEmpty] at hnesub; simp[hnesub, is_empty_tree]) hsubtree hmin u1 (by simp[extract_min] at h; grind)
 
 -- minimimla heap-distance consistency lemma
 lemma key_at_y_le_extracted_min [Nonempty V] [DecidableEq V]
