@@ -6,7 +6,7 @@ import Mathlib.Combinatorics.SimpleGraph.Metric
 import Mathlib.Data.List.Basic
 import Mathlib.Combinatorics.SimpleGraph.Acyclic
 import Mathlib.Combinatorics.SimpleGraph.Metric
-import Projects.Lindmar_Joost.BinaryHeapTreeV
+import Projects.Lindmar_Joost.BinaryHeap
 
 open Finset SimpleGraph
 open BinaryTree BinaryHeap
@@ -265,12 +265,10 @@ lemma dijkstra_rec_le_input_map
     exact le_trans hmono hstep_noninc
 
 
-
 noncomputable def dijkstra [Nonempty V] (g : FinSimpleGraph V) (source : V) (target : V) : V → ENat  :=
   let dist : V → ENat := fun v => if v = source then 0 else ⊤ -- distance map
-  let queue := BinaryHeap.empty.add source 0 -- initialize BinaryHeap with source at priority 0
+  let queue := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist) BinaryHeap.empty
   dijkstra_rec g source target dist queue
-
 /-!
 Correctness of Dijkstra's algorithm on unweighted graphs.
 We state the theorem using the graph distance from Mathlib (`SimpleGraph.dist`).
@@ -1109,7 +1107,7 @@ lemma relaxAdj_final_bound
   -- Unfold the starting state of Dijkstra.
   dsimp [dijkstra]
   let dist0 : V → ENat := fun v => if v = s then 0 else ⊤
-  let queue0 := BinaryHeap.empty.add s 0
+  let queue0 := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist0) BinaryHeap.empty
 
   -- Apply the extraction/top dichotomy.
   have hfinal_or_step := exists_extract_or_top g s t hAdj hInvPreserve hInvInit
@@ -1375,12 +1373,30 @@ lemma dijkstra_source_zero
   (g : FinSimpleGraph V) (s t : V) : (dijkstra g s t) s = 0 := by
   dsimp [dijkstra]
   let dist0 : V → ENat := fun v => if v = s then 0 else ⊤
-  let queue := BinaryHeap.empty.add s 0
+  let queue := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist0) BinaryHeap.empty
   have : dist0 s = 0 := by simp [dist0]
   exact dijkstra_rec_preserves_source_zero g s t dist0 queue this
 
 
+lemma extract_min_still_correct_1 [Nonempty V] (g : FinSimpleGraph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V)
+(h : ¬x.2.isEmpty = true)
+(step : MinGeYInvariant y x h)
+(q1 : V × BinaryHeap V := x.2.extract_min x.1 h)
+(next : V := q1.1)
+(u2 : BinaryHeap V := q1.2)
+(hu2 : (V → ℕ∞) × BinaryHeap V := relaxNeighbors g next x.1 u2)
+(w : ¬hu2.2.isEmpty = true)
+(hw : V)
+: (hu2.2.extract_min hu2.1 w).1 = hw → hu2.1 y ≤ hu2.1 hw := by sorry
 
+lemma extract_min_still_correct_2 [Nonempty V] (g : FinSimpleGraph V) (s : V) (v : V) (y : V) (x : V → ℕ∞) (x_1 : BinaryHeap V)
+(h : ¬x_1.isEmpty = true)
+(h_1 : (x_1.extract_min x h).1 = y)
+(q' : BinaryHeap V := (x_1.extract_min x h).2)
+(next : (V → ℕ∞) × BinaryHeap V := relaxNeighbors g y x q')
+(u2 : ¬next.2.isEmpty = true)
+(hu2 : V)
+: (next.2.extract_min next.1 u2).1 = hu2 → next.1 y ≤ next.1 hu2 := by sorry
 
 theorem dijkstra_correctness
   [Nonempty V]
@@ -1438,14 +1454,11 @@ theorem dijkstra_correctness
     have step' : MinGeYInvariant y x u := by simpa using step
     unfold MinGeYInvariant
     intro w hw
-    have h1 := BinaryHeap.key_at_y_le_extracted_min y hu2 hu2.1 (by grind) hw
-    exact h1
+    exact extract_min_still_correct_1 g s v y x h step q1 next u2 hu2 w hw
     ) (fun _ _ _ _ => by
     intro q' next u2 hu2;
     expose_names
-    have helper : next.2.isEmpty = false := by grind
-    have h1 := BinaryHeap.key_at_y_le_extracted_min y next next.1 (by grind) hu2
-    exact h1
+    exact extract_min_still_correct_2 g s v y x x_1 h h_1 q' next u2 hu2
     )
   -- Combine with `hy_eq` and the shortest-path step `hδ` to obtain
   -- an upper bound `dist u ≤ δ(s,u)`.
