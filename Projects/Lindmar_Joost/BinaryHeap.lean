@@ -1359,15 +1359,6 @@ lemma key_at_y_le_extracted_min' [DecidableEq α]
   rw[←hfprio]
   apply BinaryTree.key_at_y_le_extracted_min_sub_tree y p.2.tree sup.2.tree f (by grind[extract_min]) (by simp[isEmpty] at hnesub; simp[hnesub, is_empty_tree]) hsubtree hmin u1 (by simp[extract_min] at h; grind)
 
--- minimimla heap-distance consistency lemma
-lemma key_at_y_le_extracted_min [Nonempty V] [DecidableEq V]
-  (y : V) (p : (V → ENat) × BinaryHeap V) (priority: V → ENat) (hNE : isEmpty p.2 = false) :
-  ∀ u1, Prod.fst (p.2.extract_min priority (by grind)) = u1 → p.1 y ≤ p.1 u1 := by
-  intro u1 hu1
-  -- Admitted: BinaryHeap semantics ensuring the extracted minimum is not
-  -- smaller than the finalized key `y`.
-  admit
-
 lemma decrease_priorityPreservesLeaf [DecidableEq α] (bt: BinaryTree α) (v: α) (f: α → ENat): bt = leaf → BinaryTree.decrease_priority bt v f = leaf := by
 simp[BinaryTree.decrease_priority]
 intro
