@@ -66,7 +66,10 @@ theorem sizeOf_relax_neighbors_le
           subst h_queue
           exact le_refl _
       have ih_used := ih dist' queue'
-      grind
+      simp_all
+      have := Nat.le_trans (ih dist' queue') hle
+      simpa [f, acc] using this
+
 
 lemma relax_neighbors_nonincrease
     (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
@@ -426,9 +429,18 @@ lemma extracted_value_never_decreases_after_step
           · by_cases hyv : v = y
             · subst hyv
               simp [hdy]
-              grind
+              simp_all
+              have hchain : d u1 + 1 < d u1 + 1 := by
+                calc
+                  d u1 + 1 < d v := by exact lt_of_lt_of_eq hlt (id (Eq.symm hdy))
+                  _ = p.1 v := by rw [hdy]
+                  _ ≤ d u1 + 1 := hy_ge
+              exact False.elim (lt_irrefl _ hchain)
             · simp [hlt, hdy]
-              grind
+              intro eq
+              exfalso
+              have eq2 : v = y := by exact id (Eq.symm eq)
+              contradiction
           · simp [hlt]
         have preserve_eq_list : ∀ (l : List V) (q : BinaryHeap V) (d : V → ENat),
             p.1 y ≤ d u1 + 1 → d y = p.1 y → (∀ v, v ∈ l → v ≠ u1) →
@@ -455,12 +467,13 @@ lemma extracted_value_never_decreases_after_step
                   have : d' = (fun x => if x = v then d u1 + 1 else d x) := by
                     expose_names; exact left.symm
                   simp [this]
-                  grind
+                  intro eq
+                  exact False.elim (hv_ne_u1 (id (Eq.symm eq)))
                 · simp [hlt] at hacc
                   cases hacc
                   have : d' = d := by expose_names; exact left.symm
                   simp [this]
-              have hy_ge' : p.1 y ≤ d' u1 + 1 := by grind
+              have hy_ge' : p.1 y ≤ d' u1 + 1 := by exact le_of_le_of_eq hy_ge (congrFun (congrArg HAdd.hAdd (id (Eq.symm h_u1_pres))) 1)
               have hdy' : d' y = p.1 y := by simpa [h_y_pres] using hdy
               have hAllNe_vs : ∀ w, w ∈ vs → w ≠ u1 := by
                 intro w hw
@@ -497,8 +510,9 @@ lemma extracted_value_never_decreases_after_step
           exact hpres hhNext
         have hih' := h (BinaryHeap.sizeOf next2.2) hlt_k next2 rfl hhNext hmin_next
         exact le_trans hpreserve_y hih'
-  intro hhNext hInvNext
-  grind
+  intro q' next2 hNext2 hInvNext
+  clear hInvPreserve next
+  exact nondec next2 next2.2.sizeOf rfl hNext2 hInvNext
 
 lemma extracted_value_is_final_lemma
   [Nonempty V]
@@ -569,7 +583,8 @@ lemma extracted_value_is_final_lemma
               expose_names
               exact left.symm
             simp [this]
-            grind
+            intro eq
+            exact False.elim (hv_ne_y (id (Eq.symm eq)))
           · simp [hlt] at hacc
             cases hacc
             have : d' = d := by
@@ -588,10 +603,15 @@ lemma extracted_value_is_final_lemma
     simpa [relax_neighbors, neighbors, f] using this
   have hlemma := extracted_value_never_decreases_after_step g s t y dist q hq hy hInvPreserve
   intro hhN hInvN hhNext invariant
-  have hsteps := hlemma (by grind) invariant
+  have hsteps := hlemma hhNext invariant
   apply le_antisymm
-  · grind
-  · grind
+  · clear preserve_y hlemma invariant hhNext all_ne_neighbors f hInvPreserve h_final_le_dist hy
+    rw [← hnext_y_eq]
+    exact hsteps
+  · clear preserve_y hlemma invariant hhNext all_ne_neighbors f hInvPreserve hy hsteps
+    subst hInvN
+    subst next
+    exact h_final_le_dist
 
 lemma relax_neighbors_adj_upper
 (hAdj : g.Adj y u) :
@@ -629,7 +649,11 @@ lemma relax_neighbors_adj_upper
       intro d pq v hv_ne hbound
       dsimp [f]
       by_cases hlt : d y + 1 < d v
-      · grind
+      · simp_all
+        by_cases eq : u = v
+        · simp [eq]
+        · simp [eq]
+          exact hbound
       · simp [hlt, hbound]
 
     have preserve_no_u : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
@@ -641,17 +665,20 @@ lemma relax_neighbors_adj_upper
       | cons v vs ih =>
         intro d pq hu_not hb
         have hv_ne_u : v ≠ u := by
-          have : u ∉ v :: vs := hu_not
           simp
-          grind
+          clear step_u_bound step_other_preserve ih f
+          intro neq
+          subst neq
+          rw [show (v ∉ v :: vs) = (v ∈ v :: vs → False) from rfl] at hu_not
+          apply hu_not
+          exact List.mem_cons_self
         cases hacc : f (d, pq) v with
         | mk d' pq' =>
           have hb' : (Prod.fst (d', pq')) u ≤ d y + 1 := by
             have := step_other_preserve d pq v hv_ne_u hb
             simpa [f, hacc] using this
           have hu_not_vs : u ∉ vs := by
-            have : u ∉ v :: vs := hu_not
-            grind
+            exact List.not_mem_of_not_mem_cons hu_not
           simp_all
           have hdy : d' y = d y := by
             simp [f] at hacc
@@ -675,7 +702,8 @@ lemma relax_neighbors_adj_upper
           have hb'' : d' u ≤ d' y + 1 := by
             rw [hdy]
             exact hb'
-          grind
+          rw [← hdy]
+          exact ih d' pq' hb''
 
     have bound_if_mem_nodup : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
         l.Nodup → (∀ v, v ∈ l -> v ≠ y) → u ∈ l →
@@ -708,7 +736,8 @@ lemma relax_neighbors_adj_upper
                   expose_names
                   exact left.symm
                 simp [this]
-                grind
+                intro eq
+                exact False.elim (hAllNe u hmem (id (Eq.symm eq)))
               · have : d1 = d := by
                   simp [f, hlt] at hacc
                   cases hacc
@@ -734,8 +763,16 @@ lemma relax_neighbors_adj_upper
               simp [f] at hacc
               by_cases hlt : d y + 1 < d v
               · simp_all [f]
-                grind
-              · grind
+                clear ih preserve_no_u step_other_preserve step_u_bound
+                cases hacc
+                expose_names
+                clear right
+                subst left
+                simp
+                intro eq
+                exact False.elim (hv_ne_y (id (Eq.symm eq)))
+              · clear ih preserve_no_u step_other_preserve step_u_bound
+                simp_all
             have hih := ih d' q' hnodup_vs hAllNe_vs hu_in_vs
             simpa [List.foldl, f, hacc, hdy] using hih
 
@@ -864,7 +901,7 @@ lemma relax_adj_final_bound
     exact this
   | inr hstep =>
     rcases hstep with ⟨dist, q, hne, hyExtract, hfinEq⟩
-    have qempty : ¬q.isEmpty = true := by grind
+    have qempty : ¬q.isEmpty = true := hne
     let q' := Prod.snd (q.extract_min dist qempty)
     let next := relax_neighbors g y dist q'
     have hmono : ∀ x, (dijkstra_rec g s t dist q) x ≤ (Prod.fst next) x := by
@@ -914,7 +951,8 @@ lemma relax_adj_final_bound
                     have : d' = fun x => if x = v then d y + 1 else d x := by
                       expose_names; exact left.symm
                     simp [this]
-                    grind
+                    intro eq
+                    exact False.elim (hv_ne_y (id (Eq.symm eq)))
                   · simp [hlt] at hacc
                     cases hacc
                     have : d' = d := by
@@ -933,12 +971,10 @@ lemma relax_adj_final_bound
         have : dist y = (dijkstra_rec g s t next.1 next.2) y := by
           simp [dijkstra_rec, hEmptyNext, hnext_y_eq]
         exact this
-      · have helper : ¬next.2.isEmpty = true := by grind
-        have hInv0 : min_y_invariant (V := V) y next helper := by
-          exact (hInvInit dist q hne hyExtract helper)
-        have  helper : ¬q.isEmpty = true := by grind
-        have h1 := extracted_value_is_final_lemma g s t y dist q qempty helper hyExtract hInvPreserve-- hInv0
-        grind
+      · have hInv0 : min_y_invariant (V := V) y next hEmptyNext := by
+          exact (hInvInit dist q hne hyExtract hEmptyNext)
+        have h1 := extracted_value_is_final_lemma g s t y dist q qempty qempty hyExtract hInvPreserve
+        exact h1 hEmptyNext hInv0
     have hfinal_u : (dijkstra_rec g s t dist0 queue0) u = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) u := by
       exact congrFun hfinEq u
     have hfinal_y : (dijkstra_rec g s t dist0 queue0) y = (dijkstra_rec g s t (Prod.fst next) (Prod.snd next)) y := by
@@ -955,7 +991,12 @@ lemma relax_adj_final_bound
         rw [←hstable]
         exact hrelax
       exact le_trans hmono' hrelax'
-    grind
+    rw [hfinal_u]
+    rw[hfinal_y]
+    exact htarget
+
+
+
 
 lemma relax_neighbors_preserves_source_zero
   (g : fin_simple_graph V) (source u : V)
@@ -1032,12 +1073,12 @@ lemma dijkstra_rec_preserves_source_zero
   · have hne : queue.isEmpty = false := by exact eq_false_of_ne_true hq
     unfold dijkstra_rec
     simp [hq]
-    have qempty :  ¬queue.isEmpty = true  := by grind
+    have qempty :  ¬queue.isEmpty = true  := by exact hq
     let extract_result := queue.extract_min dist qempty
     let u := extract_result.1
     let queue' := extract_result.2
     set h1 := relax_neighbors g u dist queue'
-    have h1' : h1 = relax_neighbors g u dist queue' := by grind
+    have h1' : h1 = relax_neighbors g u dist queue' := by rfl
     let dist' := Prod.fst h1
     let queue'' := Prod.snd h1
     have dist'_src_zero : dist' source = 0 :=
