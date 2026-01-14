@@ -1069,25 +1069,23 @@ lemma dijkstra_source_zero
   have : dist0 s = 0 := by simp [dist0]
   exact dijkstra_rec_preserves_source_zero g s t dist0 queue this
 
-lemma extract_min_still_correct_1 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V)
-(h : ¬x.2.isEmpty = true)
-(step : min_y_invariant y x h)
-(q1 : V × BinaryHeap V := x.2.extract_min x.1 h)
-(next : V := q1.1)
-(u2 : BinaryHeap V := q1.2)
-(hu2 : (V → ℕ∞) × BinaryHeap V := relax_neighbors g next x.1 u2)
-(w : ¬hu2.2.isEmpty = true)
-(hw : V)
-: (hu2.2.extract_min hu2.1 w).1 = hw → hu2.1 y ≤ hu2.1 hw := by sorry
+lemma extract_min_still_correct_1 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
+(hempty : ¬x.2.isEmpty = true)
+(min_variant : min_y_invariant y x hempty)
+(step : V × BinaryHeap V := x.2.extract_min x.1 hempty)
+(y2 : V := step.1)
+(q' : BinaryHeap V := step.2)
+(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y2 x.1 q')
+(hempty2 : ¬next.2.isEmpty = true)
+: (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
 
-lemma extract_min_still_correct_2 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : V → ℕ∞) (x_1 : BinaryHeap V)
-(h : ¬x_1.isEmpty = true)
-(h_1 : (x_1.extract_min x h).1 = y)
-(q' : BinaryHeap V := (x_1.extract_min x h).2)
-(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y x q')
-(u2 : ¬next.2.isEmpty = true)
-(hu2 : V)
-: (next.2.extract_min next.1 u2).1 = hu2 → next.1 y ≤ next.1 hu2 := by sorry
+lemma extract_min_still_correct_2 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
+(hempty : ¬x.2.isEmpty = true)
+(hextract : (x.2.extract_min x.1 hempty).1 = y)
+(q' : BinaryHeap V := (x.2.extract_min x.1 hempty).2)
+(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y x.1 q')
+(hempty2 : ¬next.2.isEmpty = true)
+: (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
 
 theorem dijkstra_correctness
   [Nonempty V]
@@ -1118,17 +1116,17 @@ theorem dijkstra_correctness
   have hy_eq : dist y = delta g s y := by
     exact (h_min y hy_lt_u)
   have h_relax : dist u ≤ dist y + 1 :=
-    relax_adj_final_bound g s v hyu_adj (fun _ _ => by
-    intro step u q1 next u2 hu2;
-    expose_names;
-    have step' : min_y_invariant y x u := by simpa using step
-    unfold min_y_invariant
-    intro w hw
-    exact extract_min_still_correct_1 g s v y x h step q1 next u2 hu2 w hw
-    ) (fun _ _ _ _ => by
-    intro q' next u2 hu2;
-    expose_names
-    exact extract_min_still_correct_2 g s v y x x_1 h h_1 q' next u2 hu2
+    relax_adj_final_bound g s v hyu_adj
+    (fun x hempty => by
+      intro min_variant hne step y2 q' next
+      have step' : min_y_invariant y x hne := by simpa using min_variant
+      unfold min_y_invariant
+      intro hempty2 min
+      exact extract_min_still_correct_1 g s v y x min hempty min_variant step y2 q' next hempty2
+    )
+    (fun x_left x_right hempty hextract => by
+      intro q' next hempty2 min
+      exact extract_min_still_correct_2 g s v y (x_left, x_right) min hempty hextract q' next hempty2
     )
   have h_upper : dist u ≤ (delta g s u : ENat) := by
     simpa [hy_eq, hδ] using h_relax
