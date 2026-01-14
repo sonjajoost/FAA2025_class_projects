@@ -1142,7 +1142,7 @@ by_cases (bt.containsb v)
   simp [h]
   exact hmin
 
-lemma decrease_priority_preserves_members [DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v → contains (decrease_priority bt v' f) v := by
+lemma contains_then_decrease_priority_contains [DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v → contains (decrease_priority bt v' f) v := by
 simp[decrease_priority]
 by_cases v = v'
 . intro
@@ -1161,9 +1161,38 @@ by_cases v = v'
     expose_names
     apply contains_then_insert_contains
     grind[remove_preserves_members_except_v]
+lemma remove_contains_then_contains [DecidableEq α] (bt: BinaryTree α) (x v: α) (f: α → ENat): contains (bt.remove x f) v→ contains bt v := by
+fun_induction remove
+. grind
+. grind[merge_contains_then_inputs_contain]
+. grind[merge_contains_then_inputs_contain]
 
-lemma decrease_correctness[DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v → contains (decrease_priority bt v' f) v  ∧  is_min_heap bt f → is_min_heap (decrease_priority bt v f) f := by
-grind[decrease_priority_preserves_members, decrease_priority_preserves_min_heap]
+
+lemma containsb_contains [DecidableEq α] (bt: BinaryTree α): containsb bt v → contains bt v := by
+intro
+fun_induction contains
+. contradiction
+. grind
+
+lemma decrease_priority_contains_then_contains [DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains (decrease_priority bt v' f) v →  contains bt v := by
+simp[decrease_priority]
+intro h
+by_cases bt.containsb v'
+. expose_names
+  simp[h_1] at h
+  by_cases v = v'
+  . expose_names
+    apply containsb_contains
+    rw [h_2]
+    exact h_1
+  . apply insert_contains_then_contains_or_inserted at h
+    simp_all
+    apply remove_contains_then_contains at h
+    exact h
+. grind
+
+lemma decrease_priority_correctness[DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v ↔ contains (decrease_priority bt v' f) v  ∧  (is_min_heap bt f → is_min_heap (decrease_priority bt v f) f) := by
+grind[contains_then_decrease_priority_contains, decrease_priority_contains_then_contains, decrease_priority_preserves_min_heap]
 
 def size: (BinaryTree α) →  Nat
 | leaf => 0
@@ -1227,11 +1256,6 @@ cases bt
   simp[size]
   omega
 
-lemma containsb_contains [DecidableEq α] (bt: BinaryTree α): containsb bt v → contains bt v := by
-intro
-fun_induction contains
-. contradiction
-. grind
 
 lemma decrease_priority_size [DecidableEq α] (bt : BinaryTree α) (v : α) (f : α → ENat): size (decrease_priority bt v f) ≤ size bt := by
 simp[decrease_priority]
