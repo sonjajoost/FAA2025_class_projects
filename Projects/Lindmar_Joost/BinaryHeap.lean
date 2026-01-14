@@ -299,6 +299,13 @@ intro hmin hbt hl
 apply contains_right_then_contains_root bt l r v v' hbt at hl
 apply min_heap_contains_le_root bt l r v v' f hmin hbt hl
 
+-- heapify_establishes_min_heap:
+-- If the tree `bt` is a node `node l v r` and both `l` and `r` are already
+-- min-heaps (w.r.t. `f`), then `heapify bt f` produces a tree that is a
+-- min-heap.  Proof idea: recursively fix whichever child violates the heap
+-- property (using `heapify`), then use the facts that children were heaps and
+-- that `heap_min` captures the minimal priority among the root and its
+-- children to re-establish the root property.
 lemma heapify_establishes_min_heap {α} (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r ∧  is_min_heap l f ∧ is_min_heap r f → is_min_heap (heapify bt f) f := by
 fun_induction heapify generalizing l r v; all_goals expose_names
 . simp [is_min_heap]
@@ -488,6 +495,14 @@ cases bt
 . grind[is_min_heap,left_and_right_are_min_heap, heapify]
 . grind[is_min_heap,left_and_right_are_min_heap, heapify_establishes_min_heap]
 
+-- heapify_correctness:
+-- This theorem bundles two key correctness properties of `heapify`:
+-- 1) `heapify` preserves membership: an element is contained in `heapify bt f`
+--    iff it was contained in `bt`.
+-- 2) If `bt = node l v r` and both children `l` and `r` are min-heaps, then
+--    `heapify bt f` is a min-heap. The proof combines containment lemmas and
+--    `heapify_establishes_min_heap` which shows that fixing one violating
+--    child yields a valid min-heap.
 theorem heapify_correctness (bt: BinaryTree α) (f: α → ENat): (contains (heapify bt f) v ↔ contains bt v) ∧  bt = node l v r ∧  is_min_heap l f ∧ is_min_heap r f → is_min_heap (heapify bt f) f := by
 grind[heapify_establishes_min_heap, contains_then_heapify_contains, heapify_contains_then_contains]
 
@@ -564,7 +579,7 @@ fun_induction get_last generalizing l r v; all_goals (expose_names; try grind)
       . simp [get_last]
         grind
 
-lemma contains_then_extract_min_contains_except_root (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r → is_min_heap bt f → contains bt v' → v ≠  v' → contains (extract_min bt f).2 v' := by
+lemma contains_then_extract_min_contains_except_root (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r → contains bt v' → v ≠  v' → contains (extract_min bt f).2 v' := by
   intros; expose_names
 
   have hex: ∃ bt' v'', (some v'', bt') = get_last bt := by
@@ -662,6 +677,12 @@ fun_cases get_last
       exact this
     . grind[get_last_contains_then_contains]
 
+-- extract_min_correct_node:
+-- For a non-empty node `bt = node l v r` which is a min-heap, extracting the
+-- minimum returns `some v'` and a new tree `bt'` that is still a min-heap.
+-- Additionally, the priority of the extracted value equals `heap_min bt f`.
+-- Proof sketch: obtain the last node, replace the root with it, and `heapify`
+-- to restore the heap property; then use previous lemmas to relate priorities.
 lemma extract_min_correct_node (bt l r: BinaryTree α) (v: α) (f: α → ENat): bt = node l v r  → is_min_heap bt f → ∃ bt' v', extract_min bt f = (some v', bt') ∧ is_min_heap bt' f ∧ f v = heap_min bt f := by
   intros; expose_names
   have hex: ∃ bt' v'', (some v'', bt') = get_last bt := by
@@ -684,8 +705,18 @@ lemma extract_min_correct_node (bt l r: BinaryTree α) (v: α) (f: α → ENat):
         grind [left_and_right_are_min_heap, heapify_establishes_min_heap']
       . grind [min_heap_root_min]
 
-lemma extract_min_correctness (bt bt' l  r: BinaryTree α) (v v': α) (f: α → ENat): contains (extract_min bt f).2 v → contains bt v ∧ (is_min_heap bt f) → ((extract_min bt f = (some v', bt') → is_min_heap bt' f ∧ f v' = heap_min bt f) ∧ bt = node l v r → ((∃ v'' bt'', extract_min bt f = (some v'', bt'')) ∧  contains bt v''' → v ≠  v''' → contains (extract_min bt f).2 v''')):= by
-grind[extract_min_correct_node, extract_min_contains_then_contains, contains_then_extract_min_contains_except_root]
+-- extract_min_correctness:
+-- correctness for `extract_min`:
+-- - The members remain the same except for the extracted minimum.
+-- - If the input was a min-heap, extracting returns some value `v'` and a
+--   resulting tree that is a min-heap; furthermore the extracted priority
+--   equals `heap_min bt f`.
+-- The proof composes containment lemmas, `get_last` properties and
+-- `heapify` correctness used in `extract_min_correct_node`.
+theorem extract_min_correctness (bt l  r: BinaryTree α) (v v': α) (f: α → ENat): (contains (extract_min bt f).2 v → contains bt v)
+                                                                                    ∧ ( bt = node l v r → contains bt v' → v ≠  v' → contains (extract_min bt f).2 v')
+                                                                                    ∧ ( bt = node l v r  → is_min_heap bt f → ∃ bt' v', extract_min bt f = (some v', bt') ∧ is_min_heap bt' f ∧ f v = heap_min bt f):= by
+grind[extract_min_contains_then_contains, contains_then_extract_min_contains_except_root, extract_min_correct_node]
 
 lemma extract_min_is_min: is_min_heap bt f → contains bt v → (extract_min bt f).1 = some y → f y ≤ f v := by
 intro h1 h2 h3
@@ -915,6 +946,14 @@ fun_induction insert generalizing v
     exact h
   . grind
 
+-- insert_correctness:
+-- Describes the behavior of `insert`:
+-- - Membership: inserting `v'` into `bt` yields a tree where an element `v`
+--   is present iff it was already in `bt` or `v = v'` (no elements are lost,
+--   and the new element is present).
+-- - Heap preservation: if `bt` is a min-heap, then inserting preserves the
+--   min-heap property.  The proof follows by structural induction on `insert`
+--   and uses `min_heap*` lemmas to maintain the root ordering.
 theorem insert_correctness (bt: BinaryTree α) (f: α → ENat): (∀ v v', contains bt v ∨ v = v' ↔  contains (insert bt v' f) v ) ∧ (is_min_heap bt f → is_min_heap (insert bt v f) f) := by
 grind[contains_then_insert_contains, insert_contains, insert_contains_then_contains_or_inserted, insert_preserves_min_heap]
 
@@ -958,6 +997,12 @@ fun_induction merge generalizing l2 r2 v2
 . expose_names
   grind
 
+-- merge_preserves_min_heap:
+-- When two binary trees `bt1` and `bt2` are min-heaps, merging them with
+-- `merge` yields a tree that is also a min-heap.  Proof idea: by inspecting
+-- the root choices made by `merge` (which pick the smaller root) and
+-- inductively applying the property to the recursively merged subtree,
+-- one shows both children of the result are heaps and the root is ≤ children.
 lemma merge_preserves_min_heap (bt1 bt2 : BinaryTree α) (f : α → ENat) (h1 : is_min_heap bt1 f) (h2 : is_min_heap bt2 f) : is_min_heap (merge bt1 bt2 f) f := by
 fun_induction merge
 . grind
@@ -1073,6 +1118,12 @@ fun_induction remove
   grind[merge_no_new_members]
 . grind[merge_no_new_members]
 
+-- remove_preserves_min_heap:
+-- Removing an element `x` from a min-heap `bt` yields a tree that remains a
+-- min-heap. Proof sketch: follow the structure of `remove`; when `x` matches
+-- the root we merge the children (preserving heap property), otherwise
+-- recursively remove from children and reassemble the node, using the
+-- inductive hypothesis and merge-preservation lemmas as needed.
 lemma remove_preserves_min_heap [DecidableEq α] (bt : BinaryTree α) (x : α) (f : α → ENat): is_min_heap bt f → is_min_heap (remove bt x f) f := by
 intro hmin
 fun_induction remove
@@ -1129,6 +1180,12 @@ fun_induction remove
   . grind
   . grind
 
+-- decrease_priority_preserves_min_heap:
+-- Decreasing the priority of some element `v` should preserve the min-heap
+-- property. Implementation does `remove` followed by `insert` when `v` is in
+-- the tree, otherwise it is a no-op. The proof splits on whether `v` was
+-- present: if present, use `remove_preserves_min_heap` and
+-- `insert_preserves_min_heap`; otherwise the tree is unchanged.
 theorem decrease_priority_preserves_min_heap [DecidableEq α]  (bt: BinaryTree α) (v : α) (f : α → ENat): is_min_heap bt f → is_min_heap (decrease_priority bt v f) f := by
 intro hmin
 simp [decrease_priority]
@@ -1161,12 +1218,12 @@ by_cases v = v'
     expose_names
     apply contains_then_insert_contains
     grind[remove_preserves_members_except_v]
+
 lemma remove_contains_then_contains [DecidableEq α] (bt: BinaryTree α) (x v: α) (f: α → ENat): contains (bt.remove x f) v→ contains bt v := by
 fun_induction remove
 . grind
 . grind[merge_contains_then_inputs_contain]
 . grind[merge_contains_then_inputs_contain]
-
 
 lemma containsb_contains [DecidableEq α] (bt: BinaryTree α): containsb bt v → contains bt v := by
 intro
@@ -1191,6 +1248,14 @@ by_cases bt.containsb v'
     exact h
 . grind
 
+-- decrease_priority_correctness:
+-- States the two main correctness properties of `decrease_priority`:
+-- - Membership preservation/behavior: an element `v` is in the original tree
+--   exactly when it is in the tree after calling `decrease_priority bt v' f`.
+--   In other words, decreasing the priority does not lose or create elements.
+-- - Heap preservation: if the original `bt` is a min-heap, then decreasing
+--   the priority of a value preserves the min-heap property.
+-- The proof combines the containment lemmas and the preservation lemma above.
 lemma decrease_priority_correctness[DecidableEq α]  (bt: BinaryTree α) (v v': α) (f : α → ENat): contains bt v ↔ contains (decrease_priority bt v' f) v  ∧  (is_min_heap bt f → is_min_heap (decrease_priority bt v f) f) := by
 grind[contains_then_decrease_priority_contains, decrease_priority_contains_then_contains, decrease_priority_preserves_min_heap]
 
@@ -1318,6 +1383,9 @@ have: contains sub u := by grind[extract_min_returns_then_contains]
 have: contains sup u := by grind[subTree]
 have: contains sup y := by grind[extract_min_returns_then_contains]
 grind[extract_min_is_min]
+
+
+-- BinaryHeap definition and basic operations "The Binary Heap API" used in Dijkstra
 
 structure BinaryHeap (α : Type u) [DecidableEq α] where
   tree : BinaryTree α
