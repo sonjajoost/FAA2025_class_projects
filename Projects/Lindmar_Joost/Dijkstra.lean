@@ -32,6 +32,12 @@ noncomputable def relax_neighbors (g : fin_simple_graph V) (u : V) (dist : V →
     (dist, queue)
     (g.neighborFinset u).val.toList
 
+
+/-
+  The heap size does not increase when relaxing the neighbors of a vertex `u`.
+  In particular, `decrease_priority` only updates existing entries, so the resulting heap
+  after `relax_neighbors` has size at most the input heap.
+-/
 lemma sizeOf_relax_neighbors_le
     (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
     BinaryHeap.sizeOf (Prod.snd (relax_neighbors g u dist q)) ≤ BinaryHeap.sizeOf q := by
@@ -68,6 +74,11 @@ lemma sizeOf_relax_neighbors_le
       simpa [f, acc] using this
 
 
+
+/-
+  Relaxing the neighbors of `u` never increases any distance entry.
+  For each vertex `x`, the new distance after `relax_neighbors` is at most the old one.
+-/
 lemma relax_neighbors_nonincrease
     (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
     ∀ x, (Prod.fst (relax_neighbors g u dist q)) x ≤ dist x := by
@@ -115,6 +126,11 @@ lemma relax_neighbors_nonincrease
         simpa [hdef] using hle'
   intro x; simpa [relax_neighbors, neighbors, f] using fold neighbors dist q x
 
+
+/-
+  Relaxation preserves non-emptiness of the priority queue: if the input queue is nonempty,
+  then after running `relax_neighbors` the resulting queue is still nonempty.
+-/
 lemma relax_neighbors_nonempty [Nonempty V] (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
   q.isEmpty = false → (relax_neighbors g u dist q).2.isEmpty = false := by
   intro hq_ne
@@ -171,6 +187,11 @@ decreasing_by
     _ = (queue.extract_min dist (by exact hq)).2.sizeOf := by rw [hq'_eq]
     _ < queue.sizeOf := BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false queue hne dist
 
+
+/-
+  Running `dijkstra_rec` can only decrease (or leave unchanged) entries of the input distance map.
+  Concretely, for every vertex `x` the distance produced by `dijkstra_rec` is ≤ the provided `dist x`.
+-/
 lemma dijkstra_rec_le_input_map
   [Nonempty V]
   (g : fin_simple_graph V) (s t : V) :
@@ -216,6 +237,12 @@ noncomputable def dijkstra [Nonempty V] (g : fin_simple_graph V) (source : V) (t
 noncomputable def delta (g : fin_simple_graph V) (s v : V) : Nat :=
   (SimpleGraph.dist (G := (by exact g.toSimpleGraph)) s v)
 
+
+/-
+  The Dijkstra distances never underestimate the true graph distance `delta`.
+  For every vertex `u`, the true shortest-path length `delta g s u` (as an `ENat`) is ≤ the value
+  computed by `dijkstra`. (The formal proof is left as an admission here.)
+-/
 lemma never_underestimates
   [Nonempty V]
   (g : fin_simple_graph V) (s t : V) :
@@ -223,6 +250,11 @@ lemma never_underestimates
   intro u
   admit
 
+
+/-
+  Given a distance map that disagrees with the true distances, there exists a minimal counterexample.
+  That is, some vertex `u` with `dist u ≠ delta g s u` and every vertex strictly closer to `s` has the correct value.
+-/
 lemma minimal_counterexample
   [Nonempty V]
   (g : fin_simple_graph V) (s : V)
@@ -256,6 +288,11 @@ lemma minimal_counterexample
   have hmin_le : delta g s u ≤ delta g s w := hmin w hwS
   exact (not_le_of_gt hw_lt) hmin_le
 
+
+/-
+  Any non-source vertex in a connected graph has strictly positive distance from the source.
+  So if `u ≠ s` and the graph is connected then `delta g s u > 0`.
+-/
 lemma positive_distance_of_counterexample
   [Nonempty V]
   (g : fin_simple_graph V) (s : V) (u : V) (u_ne_s : u ≠ s)
@@ -278,6 +315,11 @@ lemma positive_distance_of_counterexample
   have u_e_s : u = s := by exact ((fun a ↦ a) ∘ fun a ↦ a) (id (Eq.symm hzero))
   contradiction
 
+
+/-
+  If `u` and `v` are adjacent, then the shortest path distance to `v` is at most the distance
+  to `u` plus one (cast into `ENat`).  This encodes the usual triangle inequality for adjacent vertices.
+-/
 lemma delta_adj_step_ENat
   (g : fin_simple_graph V) (s u v : V)
   (hAdj : g.toSimpleGraph.Adj u v)
@@ -292,6 +334,11 @@ lemma delta_adj_step_ENat
       _ = (g.toSimpleGraph).dist s u + 1 := by rw [hduv]
   exact_mod_cast h_nat
 
+
+/-
+  Any vertex `u` with positive distance has a predecessor `y` on a shortest path from `s`.
+  Concretely there is `y` adjacent to `u` with `delta s u = delta s y + 1`.
+-/
 lemma exists_pred_on_shortest_path
   (g : fin_simple_graph V) (s u : V)
   (hpos : 0 < delta g s u)
@@ -354,6 +401,12 @@ lemma mem_neighbor_finset_adj
     have hEquiv := SimpleGraph.mem_neighborFinset (G := g.toSimpleGraph) (v := u) (w := v)
     exact hEquiv.mp hv
 
+
+/-
+  If `y` is extracted as the minimal element and the minimality invariant holds for the heap,
+  then after one extract-and-relax step `y`'s current priority is still a lower bound for the final
+  computed distance at `y`. In other words, extracting `y` does not cause its eventual value to increase.
+-/
 lemma extracted_value_never_decreases_after_step
   [Nonempty V]
   (g : fin_simple_graph V) (s t y : V)
@@ -507,6 +560,12 @@ lemma extracted_value_never_decreases_after_step
   clear hInvPreserve next
   exact nondec next2 next2.2.sizeOf rfl hNext2 hInvNext
 
+
+/-
+  Once `y` has been extracted and the minimality invariant is maintained thereafter,
+  the current distance of `y` is final: running `dijkstra_rec` from the relaxed state yields the same value at `y`.
+  Intuitively, extracting a vertex under the invariant fixes its distance permanently.
+-/
 lemma extracted_value_is_final_lemma
   [Nonempty V]
   (g : fin_simple_graph V) (s t y : V)
@@ -606,6 +665,11 @@ lemma extracted_value_is_final_lemma
     subst next
     exact h_final_le_dist
 
+
+/-
+  If `y` is adjacent to `u`, then after relaxing neighbors of `y` the distance for `u` is at most `dist y + 1`.
+  This captures a single relaxation step improving `u` using the known value at `y`.
+-/
 lemma relax_neighbors_adj_upper
 (hAdj : g.Adj y u) :
       ∀ (dist : V → ENat) (q : BinaryHeap V),
@@ -781,6 +845,12 @@ lemma relax_neighbors_adj_upper
       bound_if_mem_nodup neighbors dist q hnodup_neighbors all_ne_neighbors hu_mem_list
     simpa [relax_neighbors, neighbors, f] using this
 
+
+/-
+  Either the final Dijkstra value at `y` is `⊤` (unreachable), or there exists a configuration
+  where `y` is the currently extracted minimum and the recursion continues from the corresponding
+  relaxed state. This distinguishes termination vs. an obtainable extraction step.
+-/
 lemma exists_extract_or_top [Nonempty V]
   (g : fin_simple_graph V) (s t : V)
   {y u : V} (hAdj : g.toSimpleGraph.Adj y u)
@@ -857,6 +927,11 @@ lemma exists_extract_or_top [Nonempty V]
         use hne
         sorry
 
+
+/-
+  If `y` is a predecessor of `u` on a shortest path, then the final Dijkstra distance at `u`
+  is at most the final distance at `y` plus one. This propagates correctness along edges.
+-/
 lemma relax_adj_final_bound
   [Nonempty V]
   (g : fin_simple_graph V) (s t : V)
@@ -988,6 +1063,11 @@ lemma relax_adj_final_bound
     rw[hfinal_y]
     exact htarget
 
+
+/-
+  Relaxing neighbors does not change the source distance: if `dist source = 0` initially,
+  then the source still has distance `0` after `relax_neighbors`.
+-/
 lemma relax_neighbors_preserves_source_zero
   (g : fin_simple_graph V) (source u : V)
   (dist : V → ENat) (q : BinaryHeap V)
@@ -1046,6 +1126,11 @@ lemma relax_neighbors_preserves_source_zero
   have h1' : h1 =  relax_neighbors g u dist q := by exact h1'
   simpa [relax_neighbors, neighbors, f, h1'] using this
 
+
+/-
+  The invariant that the source has distance `0` is preserved by `dijkstra_rec`.
+  No recursive step can change the source distance from `0`.
+-/
 lemma dijkstra_rec_preserves_source_zero
   [Nonempty V]
   (g : fin_simple_graph V) (source target : V) :
@@ -1089,6 +1174,11 @@ lemma dijkstra_rec_preserves_source_zero
       rfl
     exact this
 
+
+/-
+  The computed Dijkstra distance for the source is `0`.
+  This follows from initializing the map with `0` at the source and preserving the invariant.
+-/
 lemma dijkstra_source_zero
   [Nonempty V]
   (g : fin_simple_graph V) (s t : V) : (dijkstra g s t) s = 0 := by
@@ -1116,6 +1206,11 @@ lemma extract_min_still_correct_2 [Nonempty V] (g : fin_simple_graph V) (s : V) 
 (hempty2 : ¬next.2.isEmpty = true)
 : (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
 
+
+/-
+  Main correctness theorem: for every vertex `v`, Dijkstra computes the true shortest-path length
+  from `s` to `v`. That is, `(dijkstra g s v) v = delta g s v` when the graph is connected.
+-/
 theorem dijkstra_correctness
   [Nonempty V]
   (g : fin_simple_graph V) (s : V)
