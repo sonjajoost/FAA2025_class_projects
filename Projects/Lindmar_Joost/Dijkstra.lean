@@ -14,9 +14,18 @@ instance  fintype_fin_simple_graph {V : Type u} [Fintype V] [DecidableEq V] (G :
 
 variable  {V : Type*} [Fintype V] [DecidableEq V]
 
+/-
+  two definitions to shorten proof states
+-/
 def min_y_invariant [Nonempty V] (y : V) (p : (V → ENat) × BinaryHeap V) (hh : ¬ isEmpty p.2) : Prop :=
   ∀ u1 : V, Prod.fst (p.2.extract_min p.1 hh) = u1 → p.1 y ≤ p.1 u1
 
+noncomputable def delta (g : fin_simple_graph V) (s v : V) : Nat :=
+  (SimpleGraph.dist (G := (by exact g.toSimpleGraph)) s v)
+
+/-
+  Beginning of the implementation of the algorithm. This is the inner fold.
+-/
 noncomputable def relax_neighbors (g : fin_simple_graph V) (u : V) (dist : V → ENat) (queue : BinaryHeap V) : (V → ENat) × (BinaryHeap V) :=
   List.foldl
     (fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
@@ -32,11 +41,11 @@ noncomputable def relax_neighbors (g : fin_simple_graph V) (u : V) (dist : V →
     (dist, queue)
     (g.neighborFinset u).val.toList
 
-
 /-
   The heap size does not increase when relaxing the neighbors of a vertex `u`.
   In particular, `decrease_priority` only updates existing entries, so the resulting heap
   after `relax_neighbors` has size at most the input heap.
+  Needed - among other things- for termination of dijkstra_rec.
 -/
 lemma sizeOf_relax_neighbors_le
     (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
@@ -73,7 +82,94 @@ lemma sizeOf_relax_neighbors_le
       have := Nat.le_trans ih_used hle
       simpa [f, acc] using this
 
+/-
+  Continued implementation of the algorithm
+-/
+noncomputable def dijkstra_rec [Nonempty V] (g: fin_simple_graph V) (source : V) (target : V) (dist : V → ENat) (queue : BinaryHeap V) : V → ENat :=
+  if hq: queue.isEmpty then dist
+  else
+    have hne : ¬ queue.isEmpty = true := by exact  hq
+    let extract_result := queue.extract_min dist hne
+    let u := extract_result.1
+    let queue' := extract_result.2
+    let relax_result := relax_neighbors g u dist queue'
+    let dist' := relax_result.1
+    let queue'' := relax_result.2
+    dijkstra_rec g source target dist' queue''
+termination_by queue.sizeOf
+decreasing_by
+  have hne : queue.isEmpty = false := by exact eq_false_of_ne_true hq
+  have hq'_eq : queue' = (queue.extract_min dist (by exact hq)).2 := rfl
+  have hq''_eq : queue'' = (relax_neighbors g u dist queue').2 := rfl
+  calc queue''.sizeOf
+      = (relax_neighbors g u dist queue').2.sizeOf := by rw [hq''_eq]
+    _ ≤ queue'.sizeOf := sizeOf_relax_neighbors_le g u dist queue'
+    _ = (queue.extract_min dist (by exact hq)).2.sizeOf := by rw [hq'_eq]
+    _ < queue.sizeOf := BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false queue hne dist
 
+noncomputable def dijkstra [Nonempty V] (g : fin_simple_graph V) (source : V) (target : V) : V → ENat  :=
+  let dist : V → ENat := fun v => if v = source then 0 else ⊤
+  let queue := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist) BinaryHeap.empty
+  dijkstra_rec g source target dist queue
+
+
+
+
+/-
+  Small rather unimporant lemmas, some unproven, because that is not the focus of the project.
+-/
+
+lemma extract_min_still_correct_1 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
+(hempty : ¬x.2.isEmpty = true)
+(min_variant : min_y_invariant y x hempty)
+(step : V × BinaryHeap V := x.2.extract_min x.1 hempty)
+(y2 : V := step.1)
+(q' : BinaryHeap V := step.2)
+(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y2 x.1 q')
+(hempty2 : ¬next.2.isEmpty = true)
+: (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
+
+lemma extract_min_still_correct_2 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
+(hempty : ¬x.2.isEmpty = true)
+(hextract : (x.2.extract_min x.1 hempty).1 = y)
+(q' : BinaryHeap V := (x.2.extract_min x.1 hempty).2)
+(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y x.1 q')
+(hempty2 : ¬next.2.isEmpty = true)
+: (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
+
+
+lemma adj_mem_neighbor_finset
+  (g : fin_simple_graph V) (u v : V)
+  (hAdj : g.toSimpleGraph.Adj u v) : v ∈ g.neighborFinset u := by
+  have hEquiv := SimpleGraph.mem_neighborFinset (G := g.toSimpleGraph) (v := u) (w := v)
+  have hv : v ∈ (g.toSimpleGraph).neighborFinset u := hEquiv.mpr hAdj
+  simpa using hv
+
+lemma mem_neighbor_finset_adj
+  (g : fin_simple_graph V) (u v : V)
+  (h : v ∈ g.neighborFinset u) : g.toSimpleGraph.Adj u v := by
+    have hv : v ∈ (g.toSimpleGraph).neighborFinset u := by simpa using h
+    have hEquiv := SimpleGraph.mem_neighborFinset (G := g.toSimpleGraph) (v := u) (w := v)
+    exact hEquiv.mp hv
+
+
+/-
+  Assumed as given fact:
+  The Dijkstra distances never underestimate the true graph distance `delta`.
+  For every vertex `u`, the true shortest-path length `delta g s u` (as an `ENat`) is ≤ the value
+  computed by `dijkstra`. (The formal proof is left as an admission here.)
+-/
+lemma never_underestimates
+  [Nonempty V]
+  (g : fin_simple_graph V) (s t : V) :
+  ∀ u : V, (delta g s u : ENat) ≤ (dijkstra g s t) u := by
+  intro u
+  admit
+
+
+/-
+  START MAIN LEMMAS
+-/
 
 /-
   Relaxing the neighbors of `u` never increases any distance entry.
@@ -130,6 +226,7 @@ lemma relax_neighbors_nonincrease
 /-
   Relaxation preserves non-emptiness of the priority queue: if the input queue is nonempty,
   then after running `relax_neighbors` the resulting queue is still nonempty.
+  This was proven as part of the development. The proof of dijkstra in the end did not need this lemma.
 -/
 lemma relax_neighbors_nonempty [Nonempty V] (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
   q.isEmpty = false → (relax_neighbors g u dist q).2.isEmpty = false := by
@@ -163,29 +260,6 @@ lemma relax_neighbors_nonempty [Nonempty V] (g : fin_simple_graph V) (u : V) (di
       rw [BinaryHeap.decrease_priority_preserves_isEmpty]
       exact hqueue
     · exact ih d queue hqueue
-
-noncomputable def dijkstra_rec [Nonempty V] (g: fin_simple_graph V) (source : V) (target : V) (dist : V → ENat) (queue : BinaryHeap V) : V → ENat :=
-  if hq: queue.isEmpty then dist
-  else
-    have hne : ¬ queue.isEmpty = true := by exact  hq
-    let extract_result := queue.extract_min dist hne
-    let u := extract_result.1
-    let queue' := extract_result.2
-    let relax_result := relax_neighbors g u dist queue'
-    let dist' := relax_result.1
-    let queue'' := relax_result.2
-    dijkstra_rec g source target dist' queue''
-
-termination_by queue.sizeOf
-decreasing_by
-  have hne : queue.isEmpty = false := by exact eq_false_of_ne_true hq
-  have hq'_eq : queue' = (queue.extract_min dist (by exact hq)).2 := rfl
-  have hq''_eq : queue'' = (relax_neighbors g u dist queue').2 := rfl
-  calc queue''.sizeOf
-      = (relax_neighbors g u dist queue').2.sizeOf := by rw [hq''_eq]
-    _ ≤ queue'.sizeOf := sizeOf_relax_neighbors_le g u dist queue'
-    _ = (queue.extract_min dist (by exact hq)).2.sizeOf := by rw [hq'_eq]
-    _ < queue.sizeOf := BinaryHeap.sizeOf_extract_min_lt_of_isEmpty_eq_false queue hne dist
 
 
 /-
@@ -229,26 +303,6 @@ lemma dijkstra_rec_le_input_map
       simpa using relax_neighbors_nonincrease g u dist queue' x
     exact le_trans hIH hstep_noninc
 
-noncomputable def dijkstra [Nonempty V] (g : fin_simple_graph V) (source : V) (target : V) : V → ENat  :=
-  let dist : V → ENat := fun v => if v = source then 0 else ⊤
-  let queue := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist) BinaryHeap.empty
-  dijkstra_rec g source target dist queue
-
-noncomputable def delta (g : fin_simple_graph V) (s v : V) : Nat :=
-  (SimpleGraph.dist (G := (by exact g.toSimpleGraph)) s v)
-
-
-/-
-  The Dijkstra distances never underestimate the true graph distance `delta`.
-  For every vertex `u`, the true shortest-path length `delta g s u` (as an `ENat`) is ≤ the value
-  computed by `dijkstra`. (The formal proof is left as an admission here.)
--/
-lemma never_underestimates
-  [Nonempty V]
-  (g : fin_simple_graph V) (s t : V) :
-  ∀ u : V, (delta g s u : ENat) ≤ (dijkstra g s t) u := by
-  intro u
-  admit
 
 
 /-
@@ -386,20 +440,6 @@ lemma exists_pred_on_shortest_path
               delta_adj_step_ENat g s y u (SimpleGraph.Adj.symm hAdj) is_connected
             exact_mod_cast h_enat
         exact Nat.le_antisymm h_ge h_le
-
-lemma adj_mem_neighbor_finset
-  (g : fin_simple_graph V) (u v : V)
-  (hAdj : g.toSimpleGraph.Adj u v) : v ∈ g.neighborFinset u := by
-  have hEquiv := SimpleGraph.mem_neighborFinset (G := g.toSimpleGraph) (v := u) (w := v)
-  have hv : v ∈ (g.toSimpleGraph).neighborFinset u := hEquiv.mpr hAdj
-  simpa using hv
-
-lemma mem_neighbor_finset_adj
-  (g : fin_simple_graph V) (u v : V)
-  (h : v ∈ g.neighborFinset u) : g.toSimpleGraph.Adj u v := by
-    have hv : v ∈ (g.toSimpleGraph).neighborFinset u := by simpa using h
-    have hEquiv := SimpleGraph.mem_neighborFinset (G := g.toSimpleGraph) (v := u) (w := v)
-    exact hEquiv.mp hv
 
 
 /-
@@ -1187,24 +1227,6 @@ lemma dijkstra_source_zero
   let queue0 := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist0) BinaryHeap.empty
   have : dist0 s = 0 := by simp [dist0]
   exact dijkstra_rec_preserves_source_zero g s t dist0 queue0 this
-
-lemma extract_min_still_correct_1 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
-(hempty : ¬x.2.isEmpty = true)
-(min_variant : min_y_invariant y x hempty)
-(step : V × BinaryHeap V := x.2.extract_min x.1 hempty)
-(y2 : V := step.1)
-(q' : BinaryHeap V := step.2)
-(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y2 x.1 q')
-(hempty2 : ¬next.2.isEmpty = true)
-: (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
-
-lemma extract_min_still_correct_2 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
-(hempty : ¬x.2.isEmpty = true)
-(hextract : (x.2.extract_min x.1 hempty).1 = y)
-(q' : BinaryHeap V := (x.2.extract_min x.1 hempty).2)
-(next : (V → ℕ∞) × BinaryHeap V := relax_neighbors g y x.1 q')
-(hempty2 : ¬next.2.isEmpty = true)
-: (next.2.extract_min next.1 hempty2).1 = min → next.1 y ≤ next.1 min := by sorry
 
 
 /-
