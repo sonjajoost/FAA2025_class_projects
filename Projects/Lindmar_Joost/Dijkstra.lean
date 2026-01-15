@@ -32,7 +32,7 @@ noncomputable def relax_neighbors (g : fin_simple_graph V) (u : V) (dist : V →
     (dist, queue)
     (g.neighborFinset u).val.toList
 
-theorem sizeOf_relax_neighbors_le
+lemma sizeOf_relax_neighbors_le
     (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
     BinaryHeap.sizeOf (Prod.snd (relax_neighbors g u dist q)) ≤ BinaryHeap.sizeOf q := by
   let neighbors := (g.neighborFinset u).val.toList
@@ -50,8 +50,6 @@ theorem sizeOf_relax_neighbors_le
   | nil =>
     simp
   | cons v vs ih =>
-    simp
-    specialize ih
     cases acc : f (dist, q) v with
     | mk dist' queue' =>
       have hle : BinaryHeap.sizeOf queue' ≤ BinaryHeap.sizeOf q := by
@@ -66,8 +64,7 @@ theorem sizeOf_relax_neighbors_le
           subst h_queue
           exact le_refl _
       have ih_used := ih dist' queue'
-      simp_all
-      have := Nat.le_trans (ih dist' queue') hle
+      have := Nat.le_trans ih_used hle
       simpa [f, acc] using this
 
 
@@ -118,7 +115,7 @@ lemma relax_neighbors_nonincrease
         simpa [hdef] using hle'
   intro x; simpa [relax_neighbors, neighbors, f] using fold neighbors dist q x
 
-lemma relax_neighbors_nonempty_of_input_nonempty [Nonempty V] (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
+lemma relax_neighbors_nonempty [Nonempty V] (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
   q.isEmpty = false → (relax_neighbors g u dist q).2.isEmpty = false := by
   intro hq_ne
   unfold relax_neighbors
@@ -150,10 +147,6 @@ lemma relax_neighbors_nonempty_of_input_nonempty [Nonempty V] (g : fin_simple_gr
       rw [BinaryHeap.decrease_priority_preserves_isEmpty]
       exact hqueue
     · exact ih d queue hqueue
-
-lemma relax_neighbors_nonempty [Nonempty V] (g : fin_simple_graph V) (u : V) (dist : V → ENat) (q : BinaryHeap V) :
-  q.isEmpty = false → (relax_neighbors g u dist q).2.isEmpty = false :=
-  relax_neighbors_nonempty_of_input_nonempty g u dist q
 
 noncomputable def dijkstra_rec [Nonempty V] (g: fin_simple_graph V) (source : V) (target : V) (dist : V → ENat) (queue : BinaryHeap V) : V → ENat :=
   if hq: queue.isEmpty then dist
@@ -211,10 +204,9 @@ lemma dijkstra_rec_le_input_map
     have hq''lt' : BinaryHeap.sizeOf queue'' < n := by
       exact Nat.lt_of_lt_of_eq hq''lt hsize
     have hIH := ih (BinaryHeap.sizeOf queue'') hq''lt' dist' queue'' rfl
-    have hmono := hIH
     have hstep_noninc : dist' x ≤ dist x := by
       simpa using relax_neighbors_nonincrease g u dist queue' x
-    exact le_trans hmono hstep_noninc
+    exact le_trans hIH hstep_noninc
 
 noncomputable def dijkstra [Nonempty V] (g : fin_simple_graph V) (source : V) (target : V) : V → ENat  :=
   let dist : V → ENat := fun v => if v = source then 0 else ⊤
@@ -317,36 +309,36 @@ lemma exists_pred_on_shortest_path
     simpa [hlen_pr] using (Nat.ne_of_gt hpos)
   cases hpr : p.reverse with
     | nil =>
-      simp_all
+        simp_all
     | cons hAdj tail =>
-    rename_i y
-    let pr := p.reverse
-    have hlen_pr : pr.length = delta g s u := by
-      have h := SimpleGraph.Walk.length_reverse p
-      have : pr.length = p.length := by simp [pr]
-      simpa [delta, this] using hp
-    have hnonzero : pr.length ≠ 0 := by
-      simpa [hlen_pr] using (Nat.ne_of_gt hpos)
-    refine ⟨y, SimpleGraph.Adj.symm hAdj, ?_⟩
-    have hy_le_tail : delta g s y ≤ tail.length := by
-      rw [delta, SimpleGraph.dist_comm]
-      simp_all
-      exact dist_le tail
-    have hlen_cons : pr.length = tail.length + 1 := by
-      change (p.reverse).length = tail.length + 1
-      rw [hpr]
-      rw [SimpleGraph.Walk.length_cons]
+        rename_i y
+        let pr := p.reverse
+        have hlen_pr : pr.length = delta g s u := by
+          have h := SimpleGraph.Walk.length_reverse p
+          have : pr.length = p.length := by simp [pr]
+          simpa [delta, this] using hp
+        have hnonzero : pr.length ≠ 0 := by
+          simpa [hlen_pr] using (Nat.ne_of_gt hpos)
+        refine ⟨y, SimpleGraph.Adj.symm hAdj, ?_⟩
+        have hy_le_tail : delta g s y ≤ tail.length := by
+          rw [delta, SimpleGraph.dist_comm]
+          simp_all
+          exact dist_le tail
+        have hlen_cons : pr.length = tail.length + 1 := by
+          change (p.reverse).length = tail.length + 1
+          rw [hpr]
+          rw [SimpleGraph.Walk.length_cons]
 
-    have h_le : delta g s y + 1 ≤ delta g s u := by
-      calc
-        delta g s y + 1 ≤ tail.length + 1 := by apply Nat.add_le_add_right; exact hy_le_tail
-        _ = pr.length := by rw [hlen_cons]
-        _ = delta g s u := by rw [hlen_pr]
-    have h_ge : delta g s u ≤ delta g s y + 1 := by
-        have h_enat : (delta g s u : ENat) ≤ (delta g s y : ENat) + 1 :=
-          delta_adj_step_ENat g s y u (SimpleGraph.Adj.symm hAdj) is_connected
-        exact_mod_cast h_enat
-    exact Nat.le_antisymm h_ge h_le
+        have h_le : delta g s y + 1 ≤ delta g s u := by
+          calc
+            delta g s y + 1 ≤ tail.length + 1 := by apply Nat.add_le_add_right; exact hy_le_tail
+            _ = pr.length := by rw [hlen_cons]
+            _ = delta g s u := by rw [hlen_pr]
+        have h_ge : delta g s u ≤ delta g s y + 1 := by
+            have h_enat : (delta g s u : ENat) ≤ (delta g s y : ENat) + 1 :=
+              delta_adj_step_ENat g s y u (SimpleGraph.Adj.symm hAdj) is_connected
+            exact_mod_cast h_enat
+        exact Nat.le_antisymm h_ge h_le
 
 lemma adj_mem_neighbor_finset
   (g : fin_simple_graph V) (u v : V)
@@ -486,6 +478,7 @@ lemma extracted_value_never_decreases_after_step
             have h01 : (0 : ℕ∞) ≤ 1 := by decide
             simp
           exact le_trans heap_min_ge_y this
+        have next2eq : List.foldl f1 (p.1, q1) neighbors1 = next2 := by rfl
         have : (Prod.fst (List.foldl f1 (p.1, q1) neighbors1)) y = p.1 y :=
           preserve_eq_list neighbors1 q1 p.1 hy_ge1 rfl all_ne_u1
         have hEqY : next2.1 y = p.1 y := by simpa [relax_neighbors, neighbors1, f1] using this
@@ -706,7 +699,7 @@ lemma relax_neighbors_adj_upper
           exact ih d' pq' hb''
 
     have bound_if_mem_nodup : ∀ (l : List V) (d : V → ENat) (pq : BinaryHeap V),
-        l.Nodup → (∀ v, v ∈ l -> v ≠ y) → u ∈ l →
+        l.Nodup → (∀ v, v ∈ l → v ≠ y) → u ∈ l →
         (Prod.fst (List.foldl f (d, pq) l)) u ≤ d y + 1 := by
       intro l
       induction l with
@@ -995,9 +988,6 @@ lemma relax_adj_final_bound
     rw[hfinal_y]
     exact htarget
 
-
-
-
 lemma relax_neighbors_preserves_source_zero
   (g : fin_simple_graph V) (source u : V)
   (dist : V → ENat) (q : BinaryHeap V)
@@ -1006,8 +996,6 @@ lemma relax_neighbors_preserves_source_zero
   (h1' : h1 = relax_neighbors g u dist q)
   :
   (Prod.fst h1) source = 0 := by
-  have enat_add_one_not_lt_zero : ∀ x : ENat, ¬ x + 1 < 0 := by
-    intro x; exact ENat.not_lt_zero (x + 1)
 
   let neighbors := (g.neighborFinset u).val.toList
   let f := fun (acc : (V → ENat) × BinaryHeap V) (v : V) =>
@@ -1106,9 +1094,9 @@ lemma dijkstra_source_zero
   (g : fin_simple_graph V) (s t : V) : (dijkstra g s t) s = 0 := by
   dsimp [dijkstra]
   let dist0 : V → ENat := fun v => if v = s then 0 else ⊤
-  let queue := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist0) BinaryHeap.empty
+  let queue0 := Finset.univ.val.toList.foldl (fun acc v => acc.add v dist0) BinaryHeap.empty
   have : dist0 s = 0 := by simp [dist0]
-  exact dijkstra_rec_preserves_source_zero g s t dist0 queue this
+  exact dijkstra_rec_preserves_source_zero g s t dist0 queue0 this
 
 lemma extract_min_still_correct_1 [Nonempty V] (g : fin_simple_graph V) (s : V) (v : V) (y : V) (x : (V → ℕ∞) × BinaryHeap V) (min : V)
 (hempty : ¬x.2.isEmpty = true)
@@ -1135,8 +1123,6 @@ theorem dijkstra_correctness
   ∀ v : V, (dijkstra g s v) v = delta g s v := by
   intro v
   set dist := (dijkstra g s v) with hdist
-  have h_lower : ∀ u, (delta g s u : ENat) ≤ dist u :=
-    never_underestimates g s v
   by_contra hneq_v
   have hexists : ∃ u, dist u ≠ delta g s u := ⟨v, by simpa [hdist] using hneq_v⟩
   obtain ⟨u, hu_ne, h_min⟩ := minimal_counterexample g s dist hexists
@@ -1169,8 +1155,10 @@ theorem dijkstra_correctness
       intro q' next hempty2 min
       exact extract_min_still_correct_2 g s v y (x_left, x_right) min hempty hextract q' next hempty2
     )
+  have h_lower : ∀ u, (delta g s u : ENat) ≤ dist u :=
+    never_underestimates g s v
+  have h_lower_u : (delta g s u : ENat) ≤ dist u := h_lower u
   have h_upper : dist u ≤ (delta g s u : ENat) := by
     simpa [hy_eq, hδ] using h_relax
-  have h_lower_u : (delta g s u : ENat) ≤ dist u := h_lower u
   have : dist u = delta g s u := le_antisymm h_upper h_lower_u
   exact hu_ne this
